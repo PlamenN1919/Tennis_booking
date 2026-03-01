@@ -1,205 +1,252 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { ArrowRight } from "lucide-react";
-import { motion, useScroll, useTransform } from "framer-motion";
-import { useRef } from "react";
-
-const stats = [
-  { value: "500+", label: "ЧЛЕНОВЕ" },
-  { value: "2", label: "КОРТА" },
-  { value: "98%", label: "ДОВОЛНИ\nКЛИЕНТИ" },
-];
-
-const avatarColors = ["#FF6600", "#E55C00", "#FF8533", "#CC5200"];
-const avatarInitials = ["М", "А", "И", "С"];
+import { motion } from "framer-motion";
 
 export default function HeroSection() {
-  const sectionRef = useRef<HTMLElement>(null);
-  const { scrollYProgress } = useScroll({
-    target: sectionRef,
-    offset: ["start start", "end start"],
-  });
-
-  // Parallax effects
-  const imageY = useTransform(scrollYProgress, [0, 1], [0, 120]);
-  const imageScale = useTransform(scrollYProgress, [0, 0.5], [1, 1.08]);
-  const textY = useTransform(scrollYProgress, [0, 1], [0, -40]);
-  const opacityFade = useTransform(scrollYProgress, [0, 0.6], [1, 0]);
-
   return (
     <section
-      ref={sectionRef}
-      className="relative w-full min-h-screen overflow-hidden bg-black noise-overlay mesh-gradient-hero"
+      className="relative min-h-screen w-full overflow-hidden"
     >
-      {/* Animated mesh gradient blobs */}
-      <div className="mesh-blob mesh-blob-1" />
-      <div className="mesh-blob mesh-blob-2" />
-      <div className="mesh-blob mesh-blob-3" />
+      {/* Animated moving background gradient */}
+      <div
+        className="absolute inset-0 animate-[gradientShift_12s_ease-in-out_infinite]"
+        style={{
+          background:
+            "radial-gradient(ellipse 85% 75% at 30% 50%, #331c10 0%, #21120a 32%, #150d07 58%, #0d0b08 100%)",
+          backgroundSize: "200% 200%",
+        }}
+      />
 
-      <div className="relative z-10 max-w-[1440px] mx-auto px-6 lg:px-12 xl:px-16 pt-16 pb-6 min-h-screen flex flex-col">
+      {/* Animated gradient orbs */}
+      <div
+        className="absolute w-[650px] h-[650px] rounded-full opacity-[0.12] blur-[120px] animate-[float_18s_ease-in-out_infinite]"
+        style={{
+          background: "radial-gradient(circle, #5c3a2a, transparent 70%)",
+          top: "8%",
+          left: "2%",
+        }}
+      />
+      <div
+        className="absolute w-[550px] h-[550px] rounded-full opacity-[0.09] blur-[100px] animate-[float_22s_ease-in-out_infinite_reverse]"
+        style={{
+          background: "radial-gradient(circle, #4e2e1c, transparent 70%)",
+          bottom: "2%",
+          right: "8%",
+        }}
+      />
+      <div
+        className="absolute w-[450px] h-[450px] rounded-full opacity-[0.07] blur-[90px] animate-[float_15s_ease-in-out_infinite_2s]"
+        style={{
+          background: "radial-gradient(circle, #402418, transparent 70%)",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+        }}
+      />
 
-        {/* Top Badge — with subtle glow animation */}
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
-          className="mb-12"
-        >
-          <span className="inline-block px-5 py-2 rounded-full border border-white/10 text-white/50 text-xs font-medium tracking-[0.25em] uppercase border-glow-animate">
-            Tennis Club Oasis
-          </span>
-        </motion.div>
+      {/* Subtle grain texture overlay */}
+      <div
+        className="absolute inset-0 opacity-[0.04]"
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.5'/%3E%3C/svg%3E")`,
+        }}
+      />
 
-        {/* Central Layout — Image centered, text around it */}
-        <div className="flex-1 relative flex flex-col lg:flex-row items-center justify-center gap-10 lg:gap-0 mt-8 lg:mt-0">
+      {/* Decorative gradient accent line */}
+      <div className="absolute top-0 left-0 right-0 h-[1px]"
+        style={{
+          background: "linear-gradient(90deg, transparent 10%, rgba(92, 58, 42, 0.4) 30%, rgba(139, 90, 60, 0.6) 50%, rgba(92, 58, 42, 0.4) 70%, transparent 90%)",
+        }}
+      />
 
-          {/* CENTER — Tall Oval Image with parallax + vignette */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.92 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 1, delay: 0.2, ease: [0.23, 1, 0.32, 1] }}
-            style={{ y: imageY, scale: imageScale }}
-            className="relative z-10 order-2 lg:order-none"
-          >
-            <div className="relative w-[280px] h-[400px] sm:w-[320px] sm:h-[480px] lg:w-[380px] lg:h-[650px] xl:w-[420px] xl:h-[730px] rounded-[220px] overflow-hidden border border-white/8 shadow-2xl shadow-black/50 vignette glow-warm">
-              <Image
-                src="/hero-tennis.jpg"
-                alt="Tennis court with racket"
-                fill
-                className="object-cover"
-                priority
-              />
-              {/* Enhanced gradient overlay with depth */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/15 z-[1]" />
-              {/* Warm lens flare effect */}
-              <div className="absolute top-0 right-0 w-1/2 h-1/3 bg-gradient-to-bl from-[#FF6600]/[0.06] to-transparent z-[1]" />
-            </div>
-          </motion.div>
-
-
-
-          {/* LEFT — Large Heading with parallax + script font accent */}
-          <motion.div
-            initial={{ opacity: 0, x: -50 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8, delay: 0.15, ease: [0.23, 1, 0.32, 1] }}
-            style={{ y: textY, opacity: opacityFade }}
-            className="relative lg:absolute lg:-left-24 xl:-left-32 z-20 order-1 lg:order-none w-full lg:w-auto flex flex-col items-center lg:items-start text-center lg:text-left"
-          >
-            <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-[5.5rem] xl:text-[6.5rem] font-black text-white leading-[0.92] tracking-tight uppercase flex flex-col items-center lg:items-start">
-              <motion.span
-                className="block"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.3, ease: [0.23, 1, 0.32, 1] }}
-              >
-                Твоето
-              </motion.span>
-              <motion.span
-                className="block mt-1"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.45, ease: [0.23, 1, 0.32, 1] }}
-              >
-                място за
-              </motion.span>
-              <motion.span
-                className="block mt-1"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.6, ease: [0.23, 1, 0.32, 1] }}
-              >
-                <span className="text-[#FF6600]">
-                  тенис
-                </span>
-              </motion.span>
-            </h1>
-          </motion.div>
-
-          {/* RIGHT — Stats + Description */}
-          <motion.div
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8, delay: 0.4, ease: [0.23, 1, 0.32, 1] }}
-            style={{ opacity: opacityFade }}
-            className="relative lg:absolute lg:-right-24 xl:-right-32 flex flex-col items-center lg:items-start order-3 lg:order-none w-full lg:w-auto pb-8 lg:pb-0"
-          >
-            {/* Stats Row — staggered */}
-            <div className="flex w-full max-w-[360px] justify-between mb-8 gap-4 sm:gap-6 lg:gap-8">
-              {stats.map((stat, i) => (
-                <motion.div
-                  key={i}
-                  className="text-center lg:text-left"
-                  initial={{ opacity: 0, y: 15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: 0.5 + i * 0.12, ease: [0.23, 1, 0.32, 1] }}
-                >
-                  <div className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight counter-glow">
-                    {stat.value}
-                  </div>
-                  <div className="mt-1 text-[9px] sm:text-[10px] text-white/35 font-medium tracking-[0.12em] uppercase whitespace-pre-line leading-tight">
-                    {stat.label}
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-
-            {/* Divider — warm gradient line */}
-            <div className="w-full max-w-[260px] lg:max-w-none h-px bg-gradient-to-r from-transparent via-[#FF6600]/30 to-transparent lg:from-white/10 lg:via-[#FF6600]/15 lg:to-transparent mb-6" />
-
-            {/* Description */}
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.8, delay: 0.9 }}
-              className="text-white/35 text-center lg:text-left text-sm leading-relaxed max-w-[300px] lg:max-w-sm mx-auto lg:mx-0"
-            >
-              Перфектни условия. Дигитално удобство. Резервирай корт или
-              персонален треньор бързо, лесно и безпроблемно.
-            </motion.p>
-
-            {/* CTA Button — with shimmer effect */}
-            <Link href="/booking" className="mt-6 inline-block">
-              <button className="btn-shimmer group flex items-center gap-3 bg-[#FF6600] hover:bg-[#E55C00] text-white rounded-full h-14 px-8 font-bold text-sm uppercase tracking-wide shadow-2xl shadow-[#FF6600]/20 transition-all duration-500 hover:shadow-[#FF6600]/35 hover:scale-[1.03]">
-                Резервирай
-                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center group-hover:bg-white/30 transition-all duration-300">
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+      {/* Content */}
+      <div className="relative z-10 max-w-[1440px] mx-auto px-6 lg:px-10 pt-24 pb-8 min-h-screen flex flex-col">
+        {/* Main Content */}
+        <div className="flex-1 flex items-center">
+          <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+            {/* Left Column - Main Heading */}
+            <div className="lg:col-span-6 lg:col-start-1 lg:row-start-1 relative z-20">
+              <h1 className="text-5xl sm:text-6xl lg:text-7xl xl:text-[5.5rem] font-black text-white leading-[0.95] tracking-tight uppercase drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]">
+                <div className="overflow-hidden pb-2 -mb-2">
+                  <motion.div
+                    initial={{ y: "100%" }}
+                    animate={{ y: 0 }}
+                    transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
+                  >
+                    Твоето
+                  </motion.div>
                 </div>
-              </button>
-            </Link>
-          </motion.div>
+                <div className="overflow-hidden pb-2 -mb-2">
+                  <motion.div
+                    initial={{ y: "100%" }}
+                    animate={{ y: 0 }}
+                    transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
+                    className="whitespace-nowrap"
+                  >
+                    място за
+                  </motion.div>
+                </div>
+                <div className="overflow-hidden pb-2 -mb-2">
+                  <motion.div
+                    initial={{ y: "100%" }}
+                    animate={{ y: 0 }}
+                    transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1], delay: 0.3 }}
+                  >
+                    <motion.span
+                      animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
+                      transition={{ duration: 4, ease: "linear", repeat: Infinity }}
+                      className="bg-clip-text text-transparent bg-gradient-to-r from-orange-400 via-yellow-200 to-orange-400 inline-block pr-4"
+                      style={{ backgroundSize: "200% auto" }}
+                    >
+                      тенис.
+                    </motion.span>
+                  </motion.div>
+                </div>
+              </h1>
+            </div>
+
+            {/* Center Column - Oval Image */}
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 1, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
+              className="lg:col-span-4 lg:col-start-5 lg:row-start-1 flex justify-center z-0"
+            >
+              {/* Outer glow behind the image */}
+              <div className="relative">
+                <div
+                  className="absolute -inset-4 rounded-[210px] blur-[40px] opacity-60"
+                  style={{
+                    background:
+                      "radial-gradient(ellipse at center, rgba(139, 90, 60, 0.4), rgba(92, 58, 42, 0.2) 50%, transparent 80%)",
+                  }}
+                />
+                <div
+                  className="relative w-[350px] h-[560px] lg:w-[400px] lg:h-[660px] rounded-[200px] overflow-hidden"
+                  style={{
+                    boxShadow:
+                      "0 0 60px rgba(139, 90, 60, 0.35), 0 0 120px rgba(109, 70, 45, 0.2), 0 0 200px rgba(92, 58, 42, 0.12), 0 25px 50px rgba(0,0,0,0.4)",
+                  }}
+                >
+                  <img
+                    src="/hero-tennis.jpg"
+                    alt="Tennis player"
+                    className="w-full h-full object-cover object-center scale-110"
+                  />
+                  {/* Inner border glow */}
+                  <div
+                    className="absolute inset-0 rounded-[200px] pointer-events-none"
+                    style={{
+                      boxShadow: "inset 0 0 40px rgba(139, 90, 60, 0.15)",
+                    }}
+                  />
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Right Column - Stats & Description */}
+            <motion.div 
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.4 }}
+              className="lg:col-span-4 lg:col-start-9 lg:row-start-1 flex flex-col gap-8"
+            >
+              {/* Stats Row */}
+              <div className="flex items-start gap-6 lg:gap-8">
+                <div className="text-center">
+                  <p className="text-3xl lg:text-4xl font-black text-white">500+</p>
+                  <p className="text-[10px] text-white/60 uppercase tracking-wider font-medium mt-1">Членове</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-3xl lg:text-4xl font-black text-white">12</p>
+                  <p className="text-[10px] text-white/60 uppercase tracking-wider font-medium mt-1">Корта</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-3xl lg:text-4xl font-black text-white">98%</p>
+                  <p className="text-[10px] text-white/60 uppercase tracking-wider font-medium mt-1 leading-tight">
+                    Доволни
+                    <br />
+                    клиенти
+                  </p>
+                </div>
+              </div>
+
+              {/* Decorative separator line */}
+              <div
+                className="w-16 h-[1px]"
+                style={{
+                  background: "linear-gradient(90deg, rgba(139, 90, 60, 0.6), transparent)",
+                }}
+              />
+
+              {/* Description */}
+              <p className="text-white/50 text-sm leading-relaxed max-w-sm">
+                Ние ви предлагаме професионални условия за тренировки, частни уроци и турнири. Резервирайте кортове и тренировки с няколко клика.
+              </p>
+
+              {/* CTA Button */}
+              <Link href="/booking">
+                <button className="group flex items-center gap-3 bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm uppercase tracking-wider rounded-full px-8 py-4 transition-all duration-300 shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50">
+                  Резервирай
+                  <span className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center group-hover:bg-white/30 transition-colors">
+                    <ArrowRight className="w-4 h-4" />
+                  </span>
+                </button>
+              </Link>
+            </motion.div>
+          </div>
         </div>
 
-        {/* Bottom Row — Avatars + CTA */}
-        <motion.div
-          initial={{ opacity: 0, y: 25 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.7, ease: [0.23, 1, 0.32, 1] }}
-          className="relative lg:absolute mt-8 lg:mt-0 lg:bottom-12 xl:bottom-16 left-0 lg:left-12 xl:left-16 flex items-center justify-center lg:justify-start w-full lg:w-auto pb-12 lg:pb-0"
+        {/* Bottom Section */}
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.6 }}
+          className="flex items-end justify-between mt-auto pt-8"
         >
-          {/* Overlapping Avatars — with stagger */}
-          <div className="flex items-center">
-            <div className="flex -space-x-3">
-              {avatarColors.map((color, i) => (
-                <motion.div
+          {/* Left - Avatar badges */}
+          <div
+            className="flex items-center gap-4 px-5 py-3 rounded-full backdrop-blur-md"
+            style={{
+              background: "linear-gradient(135deg, rgba(92, 58, 42, 0.15), rgba(45, 28, 18, 0.25))",
+              border: "1px solid rgba(139, 90, 60, 0.15)",
+              boxShadow: "0 4px 20px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.04)",
+            }}
+          >
+            <div className="flex -space-x-2">
+              {[
+                { letter: "М", bg: "from-orange-500 to-orange-700" },
+                { letter: "А", bg: "from-amber-600 to-amber-800" },
+                { letter: "К", bg: "from-orange-600 to-red-700" },
+                { letter: "С", bg: "from-amber-500 to-orange-700" },
+              ].map((item, i) => (
+                <div
                   key={i}
-                  initial={{ opacity: 0, scale: 0.5, x: -10 }}
-                  animate={{ opacity: 1, scale: 1, x: 0 }}
-                  transition={{ duration: 0.4, delay: 0.8 + i * 0.08, ease: [0.23, 1, 0.32, 1] }}
-                  className="w-10 h-10 rounded-full border-2 border-black flex items-center justify-center text-xs font-bold text-white shadow-lg"
-                  style={{ backgroundColor: color }}
+                  className={`w-9 h-9 rounded-full bg-gradient-to-br ${item.bg} flex items-center justify-center text-white text-xs font-semibold tracking-wide ring-2 ring-black/30 shadow-md`}
+                  style={{
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.3), 0 0 12px rgba(139, 90, 60, 0.15)",
+                  }}
                 >
-                  {avatarInitials[i]}
-                </motion.div>
+                  {item.letter}
+                </div>
               ))}
             </div>
-            <span className="ml-4 text-white/40 text-xs font-medium">
-              500+ доволни членове
-            </span>
+            <div className="flex flex-col">
+              <span className="text-white/90 text-sm font-medium tracking-wide">500+ членове</span>
+              <span className="text-white/40 text-[10px] uppercase tracking-widest">доволни клиенти</span>
+            </div>
           </div>
         </motion.div>
+
+        {/* Bottom decorative accent line */}
+        <div
+          className="absolute bottom-0 left-0 right-0 h-[1px]"
+          style={{
+            background: "linear-gradient(90deg, transparent 15%, rgba(92, 58, 42, 0.3) 40%, rgba(92, 58, 42, 0.3) 60%, transparent 85%)",
+          }}
+        />
       </div>
     </section>
   );

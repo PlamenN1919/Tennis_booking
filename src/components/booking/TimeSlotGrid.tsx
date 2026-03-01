@@ -20,22 +20,22 @@ export default function TimeSlotGrid({
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center gap-2">
-        <Clock className="w-5 h-5 text-[#FF6600]" />
-        <h3 className="font-bold text-white">Изберете час</h3>
+        <Clock className="w-5 h-5 text-orange-600" />
+        <h3 className="font-bold text-gray-900">Изберете час</h3>
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-4 text-xs text-white/50">
+      <div className="flex items-center gap-4 text-xs text-gray-500">
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded bg-green-500/20 border border-green-500/30" />
+          <div className="w-3 h-3 rounded bg-green-100 border border-green-300" />
           <span>Свободен</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded bg-[#FF6600]/20 border border-[#FF6600]/30" />
+          <div className="w-3 h-3 rounded bg-orange-100 border border-orange-300" />
           <span>Един корт свободен</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded bg-red-500/20 border border-red-500/30" />
+          <div className="w-3 h-3 rounded bg-red-100 border border-red-300" />
           <span>Зает</span>
         </div>
       </div>
@@ -55,12 +55,12 @@ export default function TimeSlotGrid({
               className={cn(
                 "relative flex flex-col items-center py-3 px-2 rounded-xl border-2 transition-all text-sm font-medium",
                 isSelected
-                  ? "bg-orange-600 text-white border-orange-600 shadow-lg shadow-[#FF6600]/20"
+                  ? "bg-orange-600 text-white border-orange-600 shadow-lg shadow-orange-200"
                   : !slot.available
-                  ? "bg-red-500/10 text-red-400 border-red-500/10 cursor-not-allowed"
+                  ? "bg-red-50 text-red-300 border-red-100 cursor-not-allowed"
                   : bothFree
-                  ? "bg-green-500/10 text-green-400 border-green-500/20 hover:border-green-400 hover:shadow-md"
-                  : "bg-[#FF6600]/10 text-[#FF6600] border-[#FF6600]/20 hover:border-orange-400 hover:shadow-md"
+                  ? "bg-green-50 text-green-700 border-green-200 hover:border-green-400 hover:shadow-md"
+                  : "bg-orange-50 text-orange-700 border-orange-200 hover:border-orange-400 hover:shadow-md"
               )}
             >
               <span className="font-bold">{slot.time}</span>
@@ -83,14 +83,14 @@ export default function TimeSlotGrid({
                   <div
                     className={cn(
                       "w-1.5 h-1.5 rounded-full",
-                      slot.courtA ? "bg-green-500/100" : "bg-red-400"
+                      slot.courtA ? "bg-green-500" : "bg-red-400"
                     )}
                     title={slot.courtA ? "Корт A свободен" : "Корт A зает"}
                   />
                   <div
                     className={cn(
                       "w-1.5 h-1.5 rounded-full",
-                      slot.courtB ? "bg-green-500/100" : "bg-red-400"
+                      slot.courtB ? "bg-green-500" : "bg-red-400"
                     )}
                     title={slot.courtB ? "Корт B свободен" : "Корт B зает"}
                   />

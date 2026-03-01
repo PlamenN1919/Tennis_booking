@@ -186,7 +186,7 @@ export default function AdminOverview({ bookings, onNavigate }: AdminOverviewPro
             </div>
             <p className="text-3xl font-black text-gray-900">
               {stats.thisMonthRevenue}
-              <span className="text-sm font-bold text-gray-400 ml-1">лв</span>
+              <span className="text-sm font-bold text-gray-400 ml-1">€</span>
             </p>
             <p className="text-xs text-gray-500 mt-1">приход този месец</p>
           </CardContent>
@@ -383,7 +383,7 @@ export default function AdminOverview({ bookings, onNavigate }: AdminOverviewPro
                         </p>
                       </div>
                       <span className="text-sm font-bold text-gray-900 flex-shrink-0">
-                        {booking.total_price} лв
+                        {booking.total_price}€
                       </span>
                     </div>
                   );
@@ -418,7 +418,7 @@ export default function AdminOverview({ bookings, onNavigate }: AdminOverviewPro
               </div>
               <div>
                 <p className="text-xs text-gray-500">Приход днес</p>
-                <p className="text-lg font-bold text-gray-900">{stats.todayRevenue} лв</p>
+                <p className="text-lg font-bold text-gray-900">{stats.todayRevenue}€</p>
               </div>
             </div>
           </CardContent>

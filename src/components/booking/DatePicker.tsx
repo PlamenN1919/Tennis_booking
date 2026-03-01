@@ -37,8 +37,8 @@ export default function DatePicker({ selectedDate, onDateSelect }: DatePickerPro
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <CalendarDays className="w-5 h-5 text-[#FF6600]" />
-          <h3 className="font-bold text-white">
+          <CalendarDays className="w-5 h-5 text-orange-600" />
+          <h3 className="font-bold text-gray-900">
             {format(selectedDate, "MMMM yyyy", { locale: bg })}
           </h3>
         </div>
@@ -80,11 +80,11 @@ export default function DatePicker({ selectedDate, onDateSelect }: DatePickerPro
               className={cn(
                 "flex flex-col items-center py-3 px-2 rounded-xl transition-all text-center",
                 isSelected
-                  ? "bg-orange-600 text-white shadow-lg shadow-[#FF6600]/20"
+                  ? "bg-orange-600 text-white shadow-lg shadow-orange-200"
                   : isPast
-                  ? "text-white/20 cursor-not-allowed"
-                  : "text-white/80 hover:bg-[#FF6600]/10 hover:text-[#FF6600]",
-                isToday && !isSelected && "ring-2 ring-[#FF6600]/40"
+                  ? "text-gray-300 cursor-not-allowed"
+                  : "text-gray-700 hover:bg-orange-50 hover:text-orange-700",
+                isToday && !isSelected && "ring-2 ring-orange-300"
               )}
             >
               <span className="text-[10px] font-medium uppercase">

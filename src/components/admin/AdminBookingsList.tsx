@@ -437,7 +437,7 @@ export default function AdminBookingsList({ bookings, onCancelBooking }: AdminBo
                     {/* Price + Actions */}
                     <div className="text-right flex items-center justify-end gap-2">
                       <span className="text-sm font-bold text-gray-900">
-                        {booking.total_price} лв
+                        {booking.total_price}€
                       </span>
                     </div>
                   </div>
@@ -535,7 +535,7 @@ export default function AdminBookingsList({ bookings, onCancelBooking }: AdminBo
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-500">Цена</span>
                   <span className="text-xl font-black text-orange-600">
-                    {selectedBooking.total_price} лв
+                    {selectedBooking.total_price}€
                   </span>
                 </div>
                 <div className="flex justify-between items-center">

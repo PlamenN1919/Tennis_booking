@@ -1,22 +1,18 @@
+import Navbar from "@/components/Navbar";
 import HeroSection from "@/components/HeroSection";
-import StatsSection from "@/components/StatsSection";
 import BenefitsSection from "@/components/BenefitsSection";
-import GallerySection from "@/components/GallerySection";
-import PricingSection from "@/components/PricingSection";
 import TestimonialsSection from "@/components/TestimonialsSection";
-import LocationSection from "@/components/LocationSection";
+import PricingSection from "@/components/PricingSection";
 import Footer from "@/components/Footer";
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-black">
+    <main className="min-h-screen">
+      <Navbar />
       <HeroSection />
-      <StatsSection />
       <BenefitsSection />
-      <GallerySection />
-      <PricingSection />
       <TestimonialsSection />
-      <LocationSection />
+      <PricingSection />
       <Footer />
     </main>
   );
