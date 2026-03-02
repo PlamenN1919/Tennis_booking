@@ -95,7 +95,7 @@ export default function AdminSidebar({
                   )}
                 </div>
               )}
-              {!collapsed && item.key === "bookings" && stats?.todayBookings ? (
+              {!collapsed && item.key === "bookings" && stats?.todayBookings && stats.todayBookings > 0 ? (
                 <span className="text-[11px] font-bold bg-white/10 text-white px-2 py-0.5 rounded-full">
                   {stats.todayBookings}
                 </span>

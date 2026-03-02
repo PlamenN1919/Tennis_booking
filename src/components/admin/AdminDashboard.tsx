@@ -12,6 +12,7 @@ import { mockBookings } from "@/lib/mock-data";
 import type { Booking } from "@/lib/supabase";
 import { groupTrainingsToVirtualBookings, setCourtIds } from "@/lib/booking-utils";
 import { getCourts, getBookingsForDateRange } from "@/lib/actions";
+import { getStoredBookings, saveBookings } from "@/lib/booking-storage";
 import { format } from "date-fns";
 import AdminSidebar, { type AdminView } from "./AdminSidebar";
 import AdminOverview from "./AdminOverview";
@@ -39,9 +40,16 @@ export default function AdminDashboard() {
   const [currentView, setCurrentView] = useState<AdminView>("overview");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [allBookings, setAllBookings] = useState<Booking[]>(mockBookings);
+  const [allBookings, setAllBookings] = useState<Booking[]>(() => getStoredBookings());
   const [groupTrainings, setGroupTrainings] = useState<GroupTraining[]>(() => getStoredGroupTrainings());
   const [groupRegistrations, setGroupRegistrations] = useState<GroupTrainingRegistration[]>(() => getStoredRegistrations());
+  
+  // Add hydration flag to avoid SSR/client mismatch for date-based calculations
+  const [isHydrated, setIsHydrated] = useState(false);
+  
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   // Merge real bookings with virtual bookings generated from group trainings
   // so that AdminCalendar and AdminCreateBooking see group-training slots as occupied
@@ -74,10 +82,11 @@ export default function AdminDashboard() {
       .then((serverBookings) => {
         if (serverBookings.length > 0) {
           setAllBookings(serverBookings);
+          saveBookings(serverBookings);
         }
       })
       .catch(() => {
-        // Supabase not available — keep using mock bookings
+        // Supabase not available — keep using stored bookings
       });
   }, []);
 
@@ -89,6 +98,16 @@ export default function AdminDashboard() {
   useEffect(() => {
     saveRegistrations(groupRegistrations);
   }, [groupRegistrations]);
+
+  // Listen for booking changes from booking flow
+  useEffect(() => {
+    const handleBookingsUpdate = (e: Event) => {
+      const detail = (e as CustomEvent).detail as Booking[];
+      setAllBookings(detail);
+    };
+    window.addEventListener("bookings-updated", handleBookingsUpdate);
+    return () => window.removeEventListener("bookings-updated", handleBookingsUpdate);
+  }, []);
 
   // Listen for registration changes from user-facing calendar
   useEffect(() => {
@@ -152,7 +171,8 @@ export default function AdminDashboard() {
     );
   }, []);
 
-  const todayBookings = allBookings.filter((b) => {
+  // Calculate stats only after hydration to avoid SSR/client mismatches
+  const todayBookings = isHydrated ? allBookings.filter((b) => {
     const d = new Date(b.start_time);
     const now = new Date();
     return (
@@ -161,7 +181,7 @@ export default function AdminDashboard() {
       d.getFullYear() === now.getFullYear() &&
       b.status === "confirmed"
     );
-  }).length;
+  }).length : 0;
 
   const pendingCount = allBookings.filter((b) => b.status === "confirmed").length;
 
@@ -290,7 +310,7 @@ export default function AdminDashboard() {
             {/* Notifications */}
             <Button variant="ghost" size="icon" className="rounded-full relative">
               <Bell className="w-5 h-5 text-gray-500" />
-              {todayBookings > 0 && (
+              {isHydrated && todayBookings > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-orange-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center">
                   {todayBookings > 9 ? "9+" : todayBookings}
                 </span>

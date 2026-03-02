@@ -51,6 +51,7 @@ import {
 } from "@/lib/booking-utils";
 import { mockBookings, mockCourts } from "@/lib/mock-data";
 import { getStoredGroupTrainings } from "@/lib/group-training-storage";
+import { getStoredBookings, saveBookings, addStoredBooking } from "@/lib/booking-storage";
 import { createBooking, getCourts, getBookingsForDateRange } from "@/lib/actions";
 import type { Booking } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
@@ -75,8 +76,8 @@ export default function BookingFlow() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bookingConfirmed, setBookingConfirmed] = useState(false);
 
-  // All bookings (mock + new ones created in this session)
-  const [allBookings, setAllBookings] = useState<Booking[]>(mockBookings);
+  // All bookings (stored + new ones created in this session)
+  const [allBookings, setAllBookings] = useState<Booking[]>(() => getStoredBookings());
 
   // On mount: attempt to load real courts from Supabase.
   // If available, update the global court IDs so all booking-utils functions
@@ -105,11 +106,22 @@ export default function BookingFlow() {
       .then((serverBookings) => {
         if (serverBookings.length > 0) {
           setAllBookings(serverBookings);
+          saveBookings(serverBookings);
         }
       })
       .catch(() => {
-        // Supabase not available — keep using mock bookings
+        // Supabase not available — keep using stored bookings
       });
+  }, []);
+
+  // Listen for booking changes to keep state up-to-date
+  useEffect(() => {
+    const handleBookingsUpdate = (e: Event) => {
+      const detail = (e as CustomEvent).detail as Booking[];
+      setAllBookings(detail);
+    };
+    window.addEventListener("bookings-updated", handleBookingsUpdate);
+    return () => window.removeEventListener("bookings-updated", handleBookingsUpdate);
   }, []);
 
   // Track group training changes to keep virtual bookings up-to-date
@@ -279,16 +291,20 @@ export default function BookingFlow() {
         return;
       }
 
-      // Server persisted — update local state for immediate UI feedback
+      // Server persisted — update local state and storage for immediate UI feedback
       const serverBookingId = result?.booking?.id;
-      setAllBookings((prev) => [...prev, buildLocalBooking(serverBookingId)]);
+      const newBooking = buildLocalBooking(serverBookingId);
+      setAllBookings((prev) => [...prev, newBooking]);
+      addStoredBooking(newBooking);
       setBookingConfirmed(true);
       setCurrentStep("confirmation");
     } catch (err: unknown) {
       // If Supabase is not configured, fall back to local-only mode (dev)
       const message = err instanceof Error ? err.message : "";
       if (message.includes("Supabase not configured")) {
-        setAllBookings((prev) => [...prev, buildLocalBooking()]);
+        const newBooking = buildLocalBooking();
+        setAllBookings((prev) => [...prev, newBooking]);
+        addStoredBooking(newBooking);
         setBookingConfirmed(true);
         setCurrentStep("confirmation");
       } else {

@@ -28,7 +28,7 @@ export async function createBooking(formData: {
 }) {
   // Check if Supabase is configured
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!supabaseUrl || supabaseUrl === "https://your-project.supabase.co") {
+  if (!supabaseUrl || supabaseUrl === "https://your-project.supabase.co" || supabaseUrl === "https://placeholder.supabase.co") {
     throw new Error("Supabase not configured — using local mock");
   }
 
@@ -391,7 +391,7 @@ export async function getBookingsForDate(date: string) {
  */
 export async function getBookingsForDateRange(startDate: string, endDate: string) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!supabaseUrl || supabaseUrl === "https://your-project.supabase.co") {
+  if (!supabaseUrl || supabaseUrl === "https://your-project.supabase.co" || supabaseUrl === "https://placeholder.supabase.co") {
     // Supabase not configured — return empty to let caller use mock data
     return [];
   }
@@ -462,6 +462,12 @@ export async function getUserBookings() {
 }
 
 export async function getCourts() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl || supabaseUrl === "https://your-project.supabase.co" || supabaseUrl === "https://placeholder.supabase.co") {
+    // Supabase not configured — return empty to let caller use mock data
+    return [];
+  }
+
   const supabase = await createServerSupabaseClient();
 
   const { data, error } = await supabase
