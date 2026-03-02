@@ -23,6 +23,8 @@ export async function createBooking(formData: {
   notes?: string;
   isRecurring?: boolean;
   recurringWeeks?: number;
+  wantsBasket?: boolean;
+  wantsRacket?: boolean;
 }) {
   // Check if Supabase is configured
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -74,12 +76,17 @@ export async function createBooking(formData: {
     }
   }
 
-  // Build time values
+  // Validate end time doesn't exceed closing hour (24:00)
   const [hours] = data.time.split(":").map(Number);
-  const baseStartTime = new Date(data.date);
-  baseStartTime.setHours(hours, 0, 0, 0);
-  const baseEndTime = new Date(baseStartTime);
-  baseEndTime.setHours(baseEndTime.getHours() + data.durationHours);
+  if (hours + data.durationHours > 24) {
+    return { error: "Резервацията надвишава работното време (до 24:00)." };
+  }
+
+  // Build time values — parse date components explicitly to avoid timezone shifts
+  // (new Date("YYYY-MM-DD") parses as UTC midnight, which can shift the date in local TZ)
+  const [year, month, day] = data.date.split("-").map(Number);
+  const baseStartTime = new Date(year, month - 1, day, hours, 0, 0, 0);
+  const baseEndTime = new Date(year, month - 1, day, hours + data.durationHours, 0, 0, 0);
 
   // Calculate weeks to book
   const weeksToBook = data.isRecurring ? data.recurringWeeks || 4 : 1;
@@ -124,14 +131,61 @@ export async function createBooking(formData: {
       return { error: `Кортът е вече зает на ${formattedDate}. Моля, изберете друг час за поредицата.` };
     }
 
+    // Check group training conflicts on the same court
+    const { data: activeGTs } = await supabase
+      .from("group_trainings")
+      .select("*")
+      .eq("date", data.date)
+      .eq("is_active", true);
+
+    if (activeGTs && activeGTs.length > 0) {
+      for (const gt of activeGTs) {
+        const gtStartH = parseInt(gt.start_time.split(":")[0]);
+        const gtEndH = parseInt(gt.end_time.split(":")[0]);
+        // Check if the booking time overlaps with the group training
+        if (hours < gtEndH && hours + data.durationHours > gtStartH) {
+          // Count how many courts are booked by regular bookings at this time
+          const { data: occupiedBookings } = await supabase
+            .from("bookings")
+            .select("court_id")
+            .eq("status", "confirmed")
+            .lt("start_time", weekEndTime.toISOString())
+            .gt("end_time", weekStartTime.toISOString());
+
+          const bookedCourtIds = new Set((occupiedBookings || []).map(b => b.court_id));
+          // Group training occupies one court; if the requested court is also booked, reject
+          if (bookedCourtIds.size >= 1 && bookedCourtIds.has(data.courtId)) {
+            const formattedDate = weekStartTime.toLocaleDateString('bg-BG');
+            return { error: `Кортът е зает (групова тренировка + резервация) на ${formattedDate}.` };
+          }
+          // If there's a booking on the OTHER court and the GT needs this court, also reject
+          if (bookedCourtIds.size >= 1 && !bookedCourtIds.has(data.courtId)) {
+            // The other court is booked, so GT takes the requested court — conflict
+            const formattedDate = weekStartTime.toLocaleDateString('bg-BG');
+            return { error: `Кортът е зает от групова тренировка на ${formattedDate}.` };
+          }
+        }
+      }
+    }
+
     // Calculate price for this specific date (handles weekends/peaks properly)
-    const price = await calculatePrice(
+    let price = await calculatePrice(
       data.courtId,
       data.bookingType,
       weekStartTime,
       data.durationHours,
       data.coachingTypeSelected || null
     );
+
+    // Add add-on prices
+    if (formData.wantsBasket) {
+      const { BASKET_RENTAL_PRICE } = await import("@/lib/booking-utils");
+      price += BASKET_RENTAL_PRICE;
+    }
+    if (formData.wantsRacket) {
+      const { RACKET_RENTAL_PRICE } = await import("@/lib/booking-utils");
+      price += RACKET_RENTAL_PRICE;
+    }
 
     let finalNotes = data.notes || null;
     if (data.bookingType === "coaching_session" && data.coachingTypeSelected) {
@@ -223,16 +277,18 @@ export async function cancelBooking(bookingId: string) {
   }
 
   // Check permission (user can cancel own, admin can cancel any)
-  if (user) {
-    const { data: profile } = await supabase
-      .from("users")
-      .select("role")
-      .eq("id", user.id)
-      .single();
+  if (!user) {
+    return { error: "Трябва да сте влезли в акаунта си, за да отмените резервация." };
+  }
 
-    if (profile?.role !== "admin" && booking.user_id !== user.id) {
-      return { error: "Нямате право да отмените тази резервация." };
-    }
+  const { data: profile } = await supabase
+    .from("users")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (profile?.role !== "admin" && booking.user_id !== user.id) {
+    return { error: "Нямате право да отмените тази резервация." };
   }
 
   // Check if booking is in the past
@@ -259,6 +315,41 @@ export async function cancelBooking(bookingId: string) {
 export async function cancelRecurringBookings(recurringGroupId: string) {
   const supabase = await createServerSupabaseClient();
 
+  // Check authentication and authorization
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "Трябва да сте влезли в акаунта си." };
+  }
+
+  // Check if user owns these bookings or is admin
+  const { data: profile } = await supabase
+    .from("users")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  const isAdmin = profile?.role === "admin";
+
+  // Verify ownership: at least one booking in the group must belong to this user
+  if (!isAdmin) {
+    const { data: groupBookings } = await supabase
+      .from("bookings")
+      .select("user_id")
+      .eq("recurring_group_id", recurringGroupId)
+      .limit(1);
+
+    if (!groupBookings || groupBookings.length === 0) {
+      return { error: "Повтарящата се резервация не е намерена." };
+    }
+
+    if (groupBookings[0].user_id !== user.id) {
+      return { error: "Нямате право да отмените тази поредица резервации." };
+    }
+  }
+
   const { error } = await supabase
     .from("bookings")
     .update({ status: "cancelled" })
@@ -273,7 +364,6 @@ export async function cancelRecurringBookings(recurringGroupId: string) {
   revalidatePath("/booking");
   revalidatePath("/admin");
 
-
   return { success: true };
 }
 
@@ -283,8 +373,8 @@ export async function getBookingsForDate(date: string) {
   const { data, error } = await supabase
     .from("bookings")
     .select("*, court:courts(*), coach:coaches(*)")
-    .gte("start_time", `${date}T00:00:00`)
-    .lte("start_time", `${date}T23:59:59`)
+    .gte("start_time", `${date}T00:00:00+00:00`)
+    .lte("start_time", `${date}T23:59:59+00:00`)
     .neq("status", "cancelled");
 
   if (error) {
@@ -295,10 +385,40 @@ export async function getBookingsForDate(date: string) {
   return data || [];
 }
 
+/**
+ * Fetch all non-cancelled bookings for a date range (inclusive).
+ * Used by client components to load real data from the database.
+ */
+export async function getBookingsForDateRange(startDate: string, endDate: string) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl || supabaseUrl === "https://your-project.supabase.co") {
+    // Supabase not configured — return empty to let caller use mock data
+    return [];
+  }
+
+  const supabase = await createServerSupabaseClient();
+
+  const { data, error } = await supabase
+    .from("bookings")
+    .select("*, court:courts(*), coach:coaches(*)")
+    .gte("start_time", `${startDate}T00:00:00+00:00`)
+    .lte("start_time", `${endDate}T23:59:59+00:00`)
+    .neq("status", "cancelled");
+
+  if (error) {
+    console.error("Error fetching bookings for range:", error);
+    return [];
+  }
+
+  return data || [];
+}
+
 export async function getBookingsForWeek(weekStart: string) {
   const supabase = await createServerSupabaseClient();
 
-  const startDate = new Date(weekStart);
+  // Parse date components explicitly to avoid timezone shifts
+  const [wy, wm, wd] = weekStart.split("-").map(Number);
+  const startDate = new Date(wy, wm - 1, wd, 0, 0, 0, 0);
   const endDate = new Date(startDate);
   endDate.setDate(endDate.getDate() + 7);
 
@@ -406,9 +526,9 @@ export async function getAdminStats() {
       ? ((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100
       : 0;
 
-  // Hourly distribution
+  // Hourly distribution — match actual business hours (8–24)
   const hourlyDistribution: Record<number, number> = {};
-  for (let h = 7; h < 22; h++) hourlyDistribution[h] = 0;
+  for (let h = 8; h < 24; h++) hourlyDistribution[h] = 0;
   allBookings.forEach((b) => {
     const hour = new Date(b.start_time).getHours();
     if (hourlyDistribution[hour] !== undefined) {
@@ -417,8 +537,11 @@ export async function getAdminStats() {
   });
 
   // Daily distribution (for this week)
+  // Fix: on Sunday (getDay()===0), go back to previous Monday
   const weekStart = new Date(now);
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1);
+  const dayOfWeek = weekStart.getDay();
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  weekStart.setDate(weekStart.getDate() + mondayOffset);
   const dailyDistribution: Record<string, number> = {};
   for (let i = 0; i < 7; i++) {
     const d = new Date(weekStart);

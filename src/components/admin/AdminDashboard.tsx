@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import {
   Search,
   Bell,
@@ -10,17 +10,29 @@ import {
 import { Button } from "@/components/ui/button";
 import { mockBookings } from "@/lib/mock-data";
 import type { Booking } from "@/lib/supabase";
+import { groupTrainingsToVirtualBookings, setCourtIds } from "@/lib/booking-utils";
+import { getCourts, getBookingsForDateRange } from "@/lib/actions";
+import { format } from "date-fns";
 import AdminSidebar, { type AdminView } from "./AdminSidebar";
 import AdminOverview from "./AdminOverview";
 import AdminCalendar from "./AdminCalendar";
 import AdminBookingsList from "./AdminBookingsList";
 import AdminCreateBooking from "./AdminCreateBooking";
+import AdminGroupTrainings from "./AdminGroupTrainings";
+import type { GroupTraining, GroupTrainingRegistration } from "@/lib/supabase";
+import {
+  getStoredGroupTrainings,
+  saveGroupTrainings,
+  getStoredRegistrations,
+  saveRegistrations,
+} from "@/lib/group-training-storage";
 
 const viewTitles: Record<AdminView, string> = {
   overview: "Табло",
   calendar: "Календар",
   bookings: "Резервации",
   create: "Нова резервация",
+  group_trainings: "Групови тренировки",
 };
 
 export default function AdminDashboard() {
@@ -28,6 +40,65 @@ export default function AdminDashboard() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [allBookings, setAllBookings] = useState<Booking[]>(mockBookings);
+  const [groupTrainings, setGroupTrainings] = useState<GroupTraining[]>(() => getStoredGroupTrainings());
+  const [groupRegistrations, setGroupRegistrations] = useState<GroupTrainingRegistration[]>(() => getStoredRegistrations());
+
+  // Merge real bookings with virtual bookings generated from group trainings
+  // so that AdminCalendar and AdminCreateBooking see group-training slots as occupied
+  const allBookingsWithGT = useMemo(() => {
+    const virtualBookings = groupTrainingsToVirtualBookings(groupTrainings, allBookings);
+    return [...allBookings, ...virtualBookings];
+  }, [allBookings, groupTrainings]);
+
+  // On mount: load real courts from Supabase and set global court IDs
+  useEffect(() => {
+    getCourts()
+      .then((serverCourts) => {
+        if (serverCourts.length >= 2) {
+          const sorted = [...serverCourts].sort((a, b) => a.name.localeCompare(b.name));
+          setCourtIds(sorted[0].id, sorted[1].id);
+        }
+      })
+      .catch(() => {
+        // Supabase not available
+      });
+
+    // Load real bookings from server (60-day window for admin)
+    const today = new Date();
+    const start = new Date(today);
+    start.setDate(start.getDate() - 30);
+    const end = new Date(today);
+    end.setDate(end.getDate() + 30);
+
+    getBookingsForDateRange(format(start, "yyyy-MM-dd"), format(end, "yyyy-MM-dd"))
+      .then((serverBookings) => {
+        if (serverBookings.length > 0) {
+          setAllBookings(serverBookings);
+        }
+      })
+      .catch(() => {
+        // Supabase not available — keep using mock bookings
+      });
+  }, []);
+
+  // Persist group trainings to localStorage whenever they change
+  useEffect(() => {
+    saveGroupTrainings(groupTrainings);
+  }, [groupTrainings]);
+
+  useEffect(() => {
+    saveRegistrations(groupRegistrations);
+  }, [groupRegistrations]);
+
+  // Listen for registration changes from user-facing calendar
+  useEffect(() => {
+    const handleRegistrationsUpdate = (e: Event) => {
+      const detail = (e as CustomEvent).detail as GroupTrainingRegistration[];
+      setGroupRegistrations(detail);
+    };
+    window.addEventListener("group-registrations-updated", handleRegistrationsUpdate);
+    return () => window.removeEventListener("group-registrations-updated", handleRegistrationsUpdate);
+  }, []);
 
   // Prefill state for creating from calendar
   const [prefillDate, setPrefillDate] = useState<string | undefined>();
@@ -59,6 +130,28 @@ export default function AdminDashboard() {
     setCurrentView(view);
   }, []);
 
+  // Group training handlers
+  const handleAddGroupTraining = useCallback((training: GroupTraining) => {
+    setGroupTrainings((prev) => [...prev, training]);
+  }, []);
+
+  const handleRemoveGroupTraining = useCallback((id: string) => {
+    setGroupTrainings((prev) => prev.filter((t) => t.id !== id));
+    setGroupRegistrations((prev) => prev.filter((r) => r.group_training_id !== id));
+  }, []);
+
+  const handleToggleGroupTraining = useCallback((id: string) => {
+    setGroupTrainings((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, is_active: !t.is_active } : t))
+    );
+  }, []);
+
+  const handleCancelGroupRegistration = useCallback((id: string) => {
+    setGroupRegistrations((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, status: "cancelled" as const } : r))
+    );
+  }, []);
+
   const todayBookings = allBookings.filter((b) => {
     const d = new Date(b.start_time);
     const now = new Date();
@@ -81,7 +174,7 @@ export default function AdminDashboard() {
       case "calendar":
         return (
           <AdminCalendar
-            bookings={allBookings}
+            bookings={allBookingsWithGT}
             onCancelBooking={handleCancelBooking}
             onCreateFromSlot={handleCreateFromCalendar}
           />
@@ -96,11 +189,23 @@ export default function AdminDashboard() {
       case "create":
         return (
           <AdminCreateBooking
-            bookings={allBookings}
+            bookings={allBookingsWithGT}
             onBookingCreated={handleBookingCreated}
             prefillDate={prefillDate}
             prefillTime={prefillTime}
             prefillCourt={prefillCourt}
+          />
+        );
+      case "group_trainings":
+        return (
+          <AdminGroupTrainings
+            groupTrainings={groupTrainings}
+            registrations={groupRegistrations}
+            bookings={allBookingsWithGT}
+            onAddTraining={handleAddGroupTraining}
+            onRemoveTraining={handleRemoveGroupTraining}
+            onToggleActive={handleToggleGroupTraining}
+            onCancelRegistration={handleCancelGroupRegistration}
           />
         );
       default:

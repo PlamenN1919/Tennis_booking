@@ -9,11 +9,12 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowUpRight,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
-export type AdminView = "overview" | "calendar" | "bookings" | "create";
+export type AdminView = "overview" | "calendar" | "bookings" | "create" | "group_trainings";
 
 interface AdminSidebarProps {
   currentView: AdminView;
@@ -31,6 +32,7 @@ const navItems: { key: AdminView; label: string; icon: React.ElementType; descri
   { key: "calendar", label: "Календар", icon: CalendarDays, description: "Седмичен график" },
   { key: "bookings", label: "Резервации", icon: List, description: "Всички резервации" },
   { key: "create", label: "Нова резервация", icon: PlusCircle, description: "Създай ръчно" },
+  { key: "group_trainings", label: "Групови тренировки", icon: Users, description: "Деца 5-8 и 8-11 г." },
 ];
 
 export default function AdminSidebar({
@@ -52,7 +54,7 @@ export default function AdminSidebar({
         {!collapsed && (
           <Link href="/" className="flex items-center gap-2">
             <span className="text-xl font-black tracking-tighter">
-              TOP<span className="text-orange-400">S</span>PIN
+              TENNIS CLUB <span className="text-orange-400">OASIS</span>
             </span>
             <span className="text-[10px] font-semibold text-orange-400 bg-orange-400/10 px-2 py-0.5 rounded-full uppercase tracking-wider">
               Admin

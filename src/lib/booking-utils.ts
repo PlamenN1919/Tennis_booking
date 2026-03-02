@@ -7,16 +7,33 @@ import {
   areIntervalsOverlapping,
 } from "date-fns";
 import { bg } from "date-fns/locale";
-import type { Booking, TimeSlot } from "@/lib/supabase";
+import type { Booking, TimeSlot, GroupTraining } from "@/lib/supabase";
+import { AGE_GROUP_LABELS } from "@/lib/supabase";
 
 // Operating hours
 export const OPENING_HOUR = 8; // 08:00
 export const CLOSING_HOUR = 24; // 24:00
 export const SLOT_DURATION = 1; // 1 hour slots
 
-// Court IDs (will be replaced with real Supabase UUIDs in production)
-export const COURT_A_ID = "court-a";
-export const COURT_B_ID = "court-b";
+// Court IDs (defaults for local/mock mode; overridden at runtime when Supabase is connected)
+export let COURT_A_ID = "court-a";
+export let COURT_B_ID = "court-b";
+
+/**
+ * Set the actual court IDs at runtime (e.g. from Supabase UUIDs).
+ * Call this once courts are loaded from the database.
+ */
+export function setCourtIds(courtAId: string, courtBId: string): void {
+  COURT_A_ID = courtAId;
+  COURT_B_ID = courtBId;
+}
+
+/**
+ * Returns the current court IDs as an array (for functions that iterate).
+ */
+export function getCourtIds(): [string, string] {
+  return [COURT_A_ID, COURT_B_ID];
+}
 
 // ============================================
 // Pricing
@@ -57,6 +74,9 @@ export const COACHING_LABELS: Record<CoachingType, string> = {
 
 /** Basket rental add-on price */
 export const BASKET_RENTAL_PRICE = 10;
+
+/** Racket rental add-on price (includes 3 balls) */
+export const RACKET_RENTAL_PRICE = 5;
 
 /**
  * Calculate total price for a booking based on time, duration and type
@@ -128,14 +148,25 @@ export function isSlotAvailable(
 /**
  * Get availability for all time slots on a given date
  * Smart check: at least one court must be free for the slot to be "available"
+ * Also marks past slots for today as unavailable.
  */
 export function getTimeSlotsWithAvailability(
   date: Date,
   bookings: Booking[]
 ): TimeSlot[] {
   const times = generateTimeSlots(date);
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+  const currentHour = now.getHours();
 
   return times.map((time) => {
+    const [hour] = time.split(":").map(Number);
+
+    // Past slots for today are not available
+    if (isToday && hour <= currentHour) {
+      return { time, courtA: false, courtB: false, available: false };
+    }
+
     const courtAFree = isSlotAvailable(date, time, COURT_A_ID, bookings);
     const courtBFree = isSlotAvailable(date, time, COURT_B_ID, bookings);
 
@@ -163,6 +194,46 @@ export function findAvailableCourt(
 }
 
 /**
+ * Check if a specific court is available for a given duration (multiple consecutive hours)
+ */
+export function isCourtAvailableForDuration(
+  date: Date,
+  time: string,
+  courtId: string,
+  durationHours: number,
+  bookings: Booking[]
+): boolean {
+  const [startHour] = time.split(":").map(Number);
+  for (let h = 0; h < durationHours; h++) {
+    const checkTime = `${String(startHour + h).padStart(2, "0")}:00`;
+    if (startHour + h >= CLOSING_HOUR) return false;
+    if (!isSlotAvailable(date, checkTime, courtId, bookings)) return false;
+  }
+  return true;
+}
+
+/**
+ * Get the maximum available consecutive hours for a court starting at a given time
+ */
+export function getMaxAvailableDuration(
+  date: Date,
+  time: string,
+  courtId: string,
+  bookings: Booking[],
+  maxHours: number = 3
+): number {
+  const [startHour] = time.split(":").map(Number);
+  let available = 0;
+  for (let h = 0; h < maxHours; h++) {
+    if (startHour + h >= CLOSING_HOUR) break;
+    const checkTime = `${String(startHour + h).padStart(2, "0")}:00`;
+    if (!isSlotAvailable(date, checkTime, courtId, bookings)) break;
+    available++;
+  }
+  return available;
+}
+
+/**
  * Format date for display in Bulgarian
  */
 export function formatDateBG(date: Date): string {
@@ -172,8 +243,65 @@ export function formatDateBG(date: Date): string {
 /**
  * Format time range
  */
-export function formatTimeRange(time: string): string {
+export function formatTimeRange(time: string, durationHours: number = SLOT_DURATION): string {
   const [hours] = time.split(":").map(Number);
-  const endHour = hours + SLOT_DURATION;
+  const endHour = hours + durationHours;
   return `${time} - ${String(endHour).padStart(2, "0")}:00`;
+}
+
+/**
+ * Convert active group trainings into virtual Booking objects so that
+ * all existing availability checks (isSlotAvailable, getTimeSlotsWithAvailability,
+ * findAvailableCourt, AdminCalendar grid, etc.) automatically treat group-training
+ * time slots as occupied.
+ *
+ * Court auto-assignment: each group training is assigned to Court A if it's free
+ * at that time; otherwise Court B. Trainings are processed sequentially so two
+ * simultaneous group trainings will occupy different courts.
+ */
+export function groupTrainingsToVirtualBookings(
+  groupTrainings: GroupTraining[],
+  existingBookings: Booking[]
+): Booking[] {
+  const virtualBookings: Booking[] = [];
+  const activeTrainings = groupTrainings.filter((t) => t.is_active);
+
+  for (const t of activeTrainings) {
+    if (!t.date || typeof t.date !== "string") continue;
+    const [y, mo, da] = t.date.split("-").map(Number);
+    if (!y || !mo || !da) continue;
+
+    const [startH] = t.start_time.split(":").map(Number);
+    const [endH] = t.end_time.split(":").map(Number);
+
+    const startTime = new Date(y, mo - 1, da, startH, 0, 0, 0);
+    const endTime = new Date(y, mo - 1, da, endH, 0, 0, 0);
+
+    // Check Court A availability against real bookings + already-assigned virtual ones
+    const allSoFar = [...existingBookings, ...virtualBookings];
+    const courtABusy = allSoFar.some((b) => {
+      if (b.court_id !== COURT_A_ID || b.status === "cancelled") return false;
+      const bStart = new Date(b.start_time);
+      const bEnd = new Date(b.end_time);
+      return isBefore(bStart, endTime) && isAfter(bEnd, startTime);
+    });
+
+    const courtId = courtABusy ? COURT_B_ID : COURT_A_ID;
+
+    virtualBookings.push({
+      id: `virtual-gt-${t.id}`,
+      user_id: "group-training",
+      court_id: courtId,
+      coach_id: null,
+      start_time: startTime.toISOString(),
+      end_time: endTime.toISOString(),
+      booking_type: "coaching_session" as const,
+      status: "confirmed" as const,
+      total_price: 0,
+      notes: `Групова тренировка: ${AGE_GROUP_LABELS[t.age_group]}`,
+      created_at: t.created_at,
+    });
+  }
+
+  return virtualBookings;
 }

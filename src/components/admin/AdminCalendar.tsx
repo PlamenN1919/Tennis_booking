@@ -60,10 +60,27 @@ export default function AdminCalendar({
 
   const getBookingForSlot = (day: Date, hour: number, courtId: string) => {
     const dayStr = format(day, "yyyy-MM-dd");
+    // Build a 1-hour window for the slot
+    const slotStart = new Date(day);
+    slotStart.setHours(hour, 0, 0, 0);
+    const slotEnd = new Date(day);
+    slotEnd.setHours(hour + 1, 0, 0, 0);
+
     return confirmedBookings.find((b) => {
+      if (b.court_id !== courtId) return false;
       const bDate = format(new Date(b.start_time), "yyyy-MM-dd");
-      const bHour = new Date(b.start_time).getHours();
-      return bDate === dayStr && bHour === hour && b.court_id === courtId;
+      if (bDate !== dayStr) {
+        // Also check for bookings that span midnight or started on a different date
+        const bEnd = new Date(b.end_time);
+        if (bEnd <= slotStart) return false;
+        const bStart = new Date(b.start_time);
+        if (bStart >= slotEnd) return false;
+        return true;
+      }
+      // Overlap detection: (bookingStart < slotEnd) AND (bookingEnd > slotStart)
+      const bookingStart = new Date(b.start_time);
+      const bookingEnd = new Date(b.end_time);
+      return bookingStart < slotEnd && bookingEnd > slotStart;
     });
   };
 
@@ -130,7 +147,7 @@ export default function AdminCalendar({
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-4 text-xs text-gray-500">
+      <div className="flex items-center gap-4 text-xs text-gray-500 flex-wrap">
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded bg-orange-100 border border-orange-300" />
           <span>Наем на корт</span>
@@ -138,6 +155,10 @@ export default function AdminCalendar({
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded bg-blue-100 border border-blue-300" />
           <span>Тренировка</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded bg-green-100 border border-green-300" />
+          <span>Групова тренировка</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded bg-gray-50 border border-gray-200" />
@@ -252,16 +273,20 @@ export default function AdminCalendar({
                               <div className="flex-1 border-r border-gray-100/50 min-h-[48px] p-0.5">
                                 {courtABooking ? (
                                   <button
-                                    onClick={() => setSelectedBooking(courtABooking)}
+                                    onClick={() => !courtABooking.id.startsWith("virtual-gt-") && setSelectedBooking(courtABooking)}
                                     className={cn(
-                                      "w-full h-full min-h-[44px] rounded-lg p-1.5 text-left transition-all hover:shadow-md hover:scale-[1.02] cursor-pointer",
-                                      courtABooking.booking_type === "coaching_session"
-                                        ? "bg-blue-100 border border-blue-200 text-blue-800"
-                                        : "bg-orange-100 border border-orange-200 text-orange-800"
+                                      "w-full h-full min-h-[44px] rounded-lg p-1.5 text-left transition-all",
+                                      courtABooking.id.startsWith("virtual-gt-")
+                                        ? "bg-green-100 border border-green-200 text-green-800 cursor-default"
+                                        : courtABooking.booking_type === "coaching_session"
+                                        ? "bg-blue-100 border border-blue-200 text-blue-800 hover:shadow-md hover:scale-[1.02] cursor-pointer"
+                                        : "bg-orange-100 border border-orange-200 text-orange-800 hover:shadow-md hover:scale-[1.02] cursor-pointer"
                                     )}
                                   >
                                     <p className="text-[10px] font-bold truncate leading-tight">
-                                      {courtABooking.booking_type === "coaching_session" ? "Тренировка" : "Наем"}
+                                      {courtABooking.id.startsWith("virtual-gt-")
+                                        ? "Групова"
+                                        : courtABooking.booking_type === "coaching_session" ? "Тренировка" : "Наем"}
                                     </p>
                                     {courtABooking.notes && (
                                       <p className="text-[9px] opacity-70 truncate mt-0.5">
@@ -282,16 +307,20 @@ export default function AdminCalendar({
                               <div className="flex-1 min-h-[48px] p-0.5">
                                 {courtBBooking ? (
                                   <button
-                                    onClick={() => setSelectedBooking(courtBBooking)}
+                                    onClick={() => !courtBBooking.id.startsWith("virtual-gt-") && setSelectedBooking(courtBBooking)}
                                     className={cn(
-                                      "w-full h-full min-h-[44px] rounded-lg p-1.5 text-left transition-all hover:shadow-md hover:scale-[1.02] cursor-pointer",
-                                      courtBBooking.booking_type === "coaching_session"
-                                        ? "bg-blue-100 border border-blue-200 text-blue-800"
-                                        : "bg-orange-100 border border-orange-200 text-orange-800"
+                                      "w-full h-full min-h-[44px] rounded-lg p-1.5 text-left transition-all",
+                                      courtBBooking.id.startsWith("virtual-gt-")
+                                        ? "bg-green-100 border border-green-200 text-green-800 cursor-default"
+                                        : courtBBooking.booking_type === "coaching_session"
+                                        ? "bg-blue-100 border border-blue-200 text-blue-800 hover:shadow-md hover:scale-[1.02] cursor-pointer"
+                                        : "bg-orange-100 border border-orange-200 text-orange-800 hover:shadow-md hover:scale-[1.02] cursor-pointer"
                                     )}
                                   >
                                     <p className="text-[10px] font-bold truncate leading-tight">
-                                      {courtBBooking.booking_type === "coaching_session" ? "Тренировка" : "Наем"}
+                                      {courtBBooking.id.startsWith("virtual-gt-")
+                                        ? "Групова"
+                                        : courtBBooking.booking_type === "coaching_session" ? "Тренировка" : "Наем"}
                                     </p>
                                     {courtBBooking.notes && (
                                       <p className="text-[9px] opacity-70 truncate mt-0.5">
@@ -415,7 +444,7 @@ export default function AdminCalendar({
                 <div>
                   <p className="text-xs text-gray-400">Цена</p>
                   <p className="text-lg font-bold text-gray-900">
-                    {selectedBooking.total_price} лв.
+                    {selectedBooking.total_price} €
                   </p>
                 </div>
                 {selectedBooking.status === "confirmed" && (

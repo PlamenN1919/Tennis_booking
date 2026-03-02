@@ -37,8 +37,14 @@ import {
   COURT_A_ID,
   COURT_B_ID,
   isSlotAvailable,
+  calculateLocalPrice,
+  getCourtHourlyPrice,
+  COACHING_PRICES,
+  COACHING_LABELS,
+  type CoachingType,
 } from "@/lib/booking-utils";
-import { mockCourts, mockCoaches } from "@/lib/mock-data";
+import { mockCourts } from "@/lib/mock-data";
+import { createBooking } from "@/lib/actions";
 import type { Booking } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 
@@ -64,7 +70,7 @@ export default function AdminCreateBooking({
   const [selectedDate, setSelectedDate] = useState<string>(prefillDate || format(new Date(), "yyyy-MM-dd"));
   const [selectedTime, setSelectedTime] = useState<string>(prefillTime || "");
   const [selectedCourt, setSelectedCourt] = useState<string>(prefillCourt || "");
-  const [selectedCoach, setSelectedCoach] = useState<string>("");
+  const [selectedCoachingType, setSelectedCoachingType] = useState<CoachingType | null>(null);
   const [durationHours, setDurationHours] = useState<number>(1);
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
@@ -87,7 +93,9 @@ export default function AdminCreateBooking({
   // Get available slots for selected date
   const availableSlots = useMemo(() => {
     if (!selectedDate) return {};
-    const date = new Date(selectedDate);
+    // Parse date components explicitly to avoid timezone shifts
+    const [py, pm, pd] = selectedDate.split("-").map(Number);
+    const date = new Date(py, pm - 1, pd);
     const result: Record<string, { courtA: boolean; courtB: boolean }> = {};
 
     hours.forEach((h) => {
@@ -123,16 +131,19 @@ export default function AdminCreateBooking({
   }, [selectedTime, selectedCourt, availableSlots]);
 
   const calculatePrice = () => {
-    let basePrice = 40 * durationHours; // base court rental
+    if (!selectedTime) return 0;
 
-    if (bookingType === "coaching_session" && selectedCoach) {
-      const coach = mockCoaches.find((c) => c.id === selectedCoach);
-      if (coach) {
-        basePrice = coach.hourly_rate * durationHours;
-      }
+    if (bookingType === "coaching_session" && selectedCoachingType) {
+      return COACHING_PRICES[selectedCoachingType] * durationHours;
     }
 
-    return basePrice;
+    // Use dynamic court pricing matching public booking flow
+    const [startHour] = selectedTime.split(":").map(Number);
+    let total = 0;
+    for (let h = 0; h < durationHours; h++) {
+      total += getCourtHourlyPrice(startHour + h);
+    }
+    return total;
   };
 
   const totalPrice = calculatePrice();
@@ -142,32 +153,54 @@ export default function AdminCreateBooking({
 
   const canSubmit = customerName.trim().length >= 2 && customerPhone.trim().length >= 7;
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!canSubmit || !selectedTime || !selectedCourt) return;
 
-    setIsSubmitting(true);
-
     const [h] = selectedTime.split(":").map(Number);
-    const date = new Date(selectedDate);
-    const startTime = new Date(date);
-    startTime.setHours(h, 0, 0, 0);
-    const endTime = new Date(startTime);
-    endTime.setHours(endTime.getHours() + durationHours);
+
+    // Validate end time doesn't exceed closing hour
+    if (h + durationHours > CLOSING_HOUR) {
+      alert("Резервацията надвишава работното време (до 24:00).");
+      return;
+    }
+
+    // Parse date components explicitly to avoid timezone shifts
+    // (new Date("YYYY-MM-DD") parses as UTC midnight which can shift the date in local TZ)
+    const [yr, mo, da] = selectedDate.split("-").map(Number);
+    const startTime = new Date(yr, mo - 1, da, h, 0, 0, 0);
+    const endTime = new Date(yr, mo - 1, da, h + durationHours, 0, 0, 0);
 
     // Create booking(s)
     const weeksToBook = isRecurring ? recurringWeeks : 1;
 
+    // Check availability for ALL weeks before creating any booking
+    const allNewBookings: Booking[] = [];
     for (let week = 0; week < weeksToBook; week++) {
       const weekStart = new Date(startTime);
       weekStart.setDate(weekStart.getDate() + week * 7);
       const weekEnd = new Date(endTime);
       weekEnd.setDate(weekEnd.getDate() + week * 7);
 
+      // Check availability: does any existing booking overlap on this court?
+      const mergedBookings = [...bookings, ...allNewBookings];
+      const hasConflict = mergedBookings.some((b) => {
+        if (b.court_id !== selectedCourt || b.status === "cancelled") return false;
+        const bStart = new Date(b.start_time);
+        const bEnd = new Date(b.end_time);
+        return bStart < weekEnd && bEnd > weekStart;
+      });
+
+      if (hasConflict) {
+        const conflictDate = weekStart.toLocaleDateString("bg-BG");
+        alert(`Кортът е вече зает на ${conflictDate} (седмица ${week + 1}). Моля, изберете друг час.`);
+        return;
+      }
+
       const newBooking: Booking = {
         id: `admin-${Date.now()}-${week}`,
         user_id: "admin",
         court_id: selectedCourt,
-        coach_id: bookingType === "coaching_session" ? selectedCoach || null : null,
+        coach_id: bookingType === "coaching_session" ? "coach-1" : null,
         start_time: weekStart.toISOString(),
         end_time: weekEnd.toISOString(),
         booking_type: bookingType,
@@ -181,13 +214,55 @@ export default function AdminCreateBooking({
         customer_email: customerEmail,
       } as any;
 
+      allNewBookings.push(newBooking);
+    }
+
+    // All weeks validated — now create all bookings
+    setIsSubmitting(true);
+
+    // Try persisting via server action (works when Supabase is configured)
+    try {
+      const result = await createBooking({
+        bookingType,
+        date: selectedDate,
+        time: selectedTime,
+        durationHours,
+        courtId: selectedCourt,
+        coachId: bookingType === "coaching_session" ? "coach-1" : null,
+        customerName,
+        customerEmail: customerEmail || undefined,
+        customerPhone,
+        notes,
+        isRecurring,
+        recurringWeeks: isRecurring ? recurringWeeks : undefined,
+      });
+
+      if (result && "error" in result && result.error) {
+        alert(result.error);
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Server persisted — update local state with server-generated booking
+      const serverBooking = result?.booking;
+      if (serverBooking) {
+        allNewBookings[0].id = serverBooking.id;
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "";
+      if (!message.includes("Supabase not configured")) {
+        console.error("Admin booking server error:", err);
+        // Continue with local-only mode
+      }
+    }
+
+    // Update local state for immediate UI feedback
+    for (const newBooking of allNewBookings) {
       onBookingCreated(newBooking);
     }
 
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setIsSuccess(true);
-    }, 800);
+    setIsSubmitting(false);
+    setIsSuccess(true);
   };
 
   const resetForm = () => {
@@ -196,7 +271,7 @@ export default function AdminCreateBooking({
     setSelectedDate(format(new Date(), "yyyy-MM-dd"));
     setSelectedTime("");
     setSelectedCourt("");
-    setSelectedCoach("");
+    setSelectedCoachingType(null);
     setDurationHours(1);
     setCustomerName("");
     setCustomerEmail("");
@@ -237,10 +312,10 @@ export default function AdminCreateBooking({
             </p>
             <div className="bg-gray-50 rounded-xl p-4 mb-6">
               <p className="text-2xl font-black text-orange-600">
-                {totalPrice * (isRecurring ? recurringWeeks : 1)} лв
+                {totalPrice * (isRecurring ? recurringWeeks : 1)} €
                 {isRecurring && (
                   <span className="text-sm font-normal text-gray-500 ml-2">
-                    ({totalPrice} лв × {recurringWeeks} седмици)
+                    ({totalPrice} € × {recurringWeeks} седмици)
                   </span>
                 )}
               </p>
@@ -322,7 +397,7 @@ export default function AdminCreateBooking({
                   </div>
                   <h4 className="font-bold text-gray-900">Наем на корт</h4>
                   <p className="text-xs text-gray-500 mt-1">Резервация на тенис корт без треньор</p>
-                  <p className="text-lg font-black text-orange-600 mt-3">от 40 лв/час</p>
+                  <p className="text-lg font-black text-orange-600 mt-3">от 15 €/час</p>
                 </button>
 
                 <button
@@ -339,32 +414,31 @@ export default function AdminCreateBooking({
                   </div>
                   <h4 className="font-bold text-gray-900">Урок с треньор</h4>
                   <p className="text-xs text-gray-500 mt-1">Индивидуална сесия с професионалист</p>
-                  <p className="text-lg font-black text-orange-600 mt-3">от 80 лв/час</p>
+                  <p className="text-lg font-black text-orange-600 mt-3">от 45 €/час</p>
                 </button>
               </div>
 
-              {/* Coach Selection */}
+              {/* Coaching Type Selection */}
               {bookingType === "coaching_session" && (
                 <div className="mt-6">
-                  <Label className="text-sm font-semibold text-gray-700 mb-3 block">Изберете треньор</Label>
-                  <div className="grid grid-cols-3 gap-3">
-                    {mockCoaches.map((coach) => (
+                  <Label className="text-sm font-semibold text-gray-700 mb-3 block">Изберете тип тренировка</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {(["individual", "pair", "sparring"] as CoachingType[]).map((ct) => (
                       <button
-                        key={coach.id}
-                        onClick={() => setSelectedCoach(coach.id)}
+                        key={ct}
+                        onClick={() => setSelectedCoachingType(ct)}
                         className={cn(
                           "rounded-xl p-4 text-left transition-all border-2",
-                          selectedCoach === coach.id
+                          selectedCoachingType === ct
                             ? "border-purple-500 bg-purple-50"
                             : "border-gray-100 hover:border-gray-200"
                         )}
                       >
                         <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center mb-2">
-                          <User className="w-5 h-5 text-purple-600" />
+                          <Users className="w-5 h-5 text-purple-600" />
                         </div>
-                        <p className="text-sm font-semibold text-gray-900">{coach.name}</p>
-                        <p className="text-[10px] text-gray-500 mt-0.5">{coach.specialization}</p>
-                        <p className="text-sm font-bold text-purple-600 mt-2">{coach.hourly_rate} лв/час</p>
+                        <p className="text-sm font-semibold text-gray-900">{COACHING_LABELS[ct]}</p>
+                        <p className="text-sm font-bold text-purple-600 mt-2">{COACHING_PRICES[ct]} €/час</p>
                       </button>
                     ))}
                   </div>
@@ -374,7 +448,7 @@ export default function AdminCreateBooking({
               <Button
                 onClick={() => setStep("datetime")}
                 className="w-full mt-6 bg-orange-600 hover:bg-orange-700 text-white rounded-full h-11"
-                disabled={bookingType === "coaching_session" && !selectedCoach}
+                disabled={bookingType === "coaching_session" && !selectedCoachingType}
               >
                 Продължи
               </Button>
@@ -429,7 +503,7 @@ export default function AdminCreateBooking({
               <div className="mb-6">
                 <Label className="text-sm font-semibold text-gray-700 mb-3 block">Продължителност</Label>
                 <div className="flex gap-2">
-                  {[1, 1.5, 2, 3].map((d) => (
+                  {[1, 2, 3].map((d) => (
                     <button
                       key={d}
                       onClick={() => {
@@ -720,9 +794,9 @@ export default function AdminCreateBooking({
                     <p className="text-sm font-bold text-gray-900">
                       {bookingType === "coaching_session" ? "Урок с треньор" : "Наем на корт"}
                     </p>
-                    {bookingType === "coaching_session" && selectedCoach && (
+                    {bookingType === "coaching_session" && selectedCoachingType && (
                       <p className="text-xs text-gray-500">
-                        {mockCoaches.find((c) => c.id === selectedCoach)?.name}
+                        {COACHING_LABELS[selectedCoachingType]}
                       </p>
                     )}
                   </div>
@@ -804,11 +878,11 @@ export default function AdminCreateBooking({
                 <span className="text-sm font-medium text-gray-700">Обща цена</span>
                 <div className="text-right">
                   <p className="text-2xl font-black text-orange-600">
-                    {totalPrice * (isRecurring ? recurringWeeks : 1)} лв
+                    {totalPrice * (isRecurring ? recurringWeeks : 1)} €
                   </p>
                   {isRecurring && (
                     <p className="text-[10px] text-gray-500">
-                      {totalPrice} лв × {recurringWeeks} седмици
+                      {totalPrice} € × {recurringWeeks} седмици
                     </p>
                   )}
                 </div>

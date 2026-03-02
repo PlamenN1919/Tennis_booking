@@ -35,6 +35,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { mockCourts, mockCoaches } from "@/lib/mock-data";
+import { COURT_A_ID, COURT_B_ID } from "@/lib/booking-utils";
 import type { Booking } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 
@@ -47,7 +48,7 @@ type SortField = "date" | "price" | "type";
 type SortOrder = "asc" | "desc";
 type StatusFilter = "all" | "confirmed" | "cancelled" | "completed";
 type TypeFilter = "all" | "court_rental" | "coaching_session";
-type CourtFilter = "all" | "court-a" | "court-b";
+type CourtFilter = "all" | string;
 type TimeFilter = "all" | "today" | "tomorrow" | "this_week" | "past" | "future";
 
 export default function AdminBookingsList({ bookings, onCancelBooking }: AdminBookingsListProps) {
@@ -109,7 +110,11 @@ export default function AdminBookingsList({ bookings, onCancelBooking }: AdminBo
           case "tomorrow": return isTomorrow(d);
           case "this_week": {
             const weekStart = new Date(now);
-            weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1);
+            // Fix: on Sunday (getDay()===0), go back to previous Monday
+            const dow = weekStart.getDay();
+            const mondayOffset = dow === 0 ? -6 : 1 - dow;
+            weekStart.setDate(weekStart.getDate() + mondayOffset);
+            weekStart.setHours(0, 0, 0, 0);
             const weekEnd = new Date(weekStart);
             weekEnd.setDate(weekEnd.getDate() + 7);
             return d >= weekStart && d < weekEnd;
@@ -297,8 +302,8 @@ export default function AdminBookingsList({ bookings, onCancelBooking }: AdminBo
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Всички кортове</SelectItem>
-                  <SelectItem value="court-a">Корт A</SelectItem>
-                  <SelectItem value="court-b">Корт B</SelectItem>
+                  <SelectItem value={COURT_A_ID}>Корт A</SelectItem>
+                  <SelectItem value={COURT_B_ID}>Корт B</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -407,7 +412,7 @@ export default function AdminBookingsList({ bookings, onCancelBooking }: AdminBo
                         variant="secondary"
                         className={cn(
                           "text-[10px] border-0 font-semibold",
-                          booking.court_id === "court-a"
+                          booking.court_id === COURT_A_ID
                             ? "bg-blue-50 text-blue-700"
                             : "bg-green-50 text-green-700"
                         )}

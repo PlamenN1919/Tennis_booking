@@ -160,7 +160,7 @@ export default function HeroSection() {
                   <p className="text-[10px] text-white/60 uppercase tracking-wider font-medium mt-1">Членове</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-3xl lg:text-4xl font-black text-white">12</p>
+                  <p className="text-3xl lg:text-4xl font-black text-white">2</p>
                   <p className="text-[10px] text-white/60 uppercase tracking-wider font-medium mt-1">Корта</p>
                 </div>
                 <div className="text-center">
@@ -183,7 +183,7 @@ export default function HeroSection() {
 
               {/* Description */}
               <p className="text-white/50 text-sm leading-relaxed max-w-sm">
-                Ние ви предлагаме професионални условия за тренировки, частни уроци и турнири. Резервирайте кортове и тренировки с няколко клика.
+                От първата тренировка до уверената игра – ние осигуряваме средата, ти носиш желанието. Резервирай лесно и започни още днес.
               </p>
 
               {/* CTA Button */}

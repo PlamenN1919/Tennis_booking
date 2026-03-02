@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { mockCourts, mockCoaches } from "@/lib/mock-data";
 import type { Booking } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
-import { OPENING_HOUR, CLOSING_HOUR } from "@/lib/booking-utils";
+import { OPENING_HOUR, CLOSING_HOUR, COURT_A_ID, COURT_B_ID } from "@/lib/booking-utils";
 
 interface AdminOverviewProps {
   bookings: Booking[];
@@ -63,8 +63,14 @@ export default function AdminOverview({ bookings, onNavigate }: AdminOverviewPro
         : 0;
 
     const todayRevenue = todayBookings.reduce((s, b) => s + b.total_price, 0);
-    const totalSlots = (CLOSING_HOUR - OPENING_HOUR) * 2; // 2 courts
-    const todayUtilization = totalSlots > 0 ? Math.round((todayBookings.length / totalSlots) * 100) : 0;
+    const totalSlots = (CLOSING_HOUR - OPENING_HOUR) * 2; // 2 courts × hours
+    // Count occupied slot-hours (a 2h booking occupies 2 slots, not 1)
+    const occupiedSlotHours = todayBookings.reduce((sum, b) => {
+      const bStart = new Date(b.start_time).getHours();
+      const bEnd = new Date(b.end_time).getHours();
+      return sum + (bEnd - bStart);
+    }, 0);
+    const todayUtilization = totalSlots > 0 ? Math.round((occupiedSlotHours / totalSlots) * 100) : 0;
 
     // Hourly distribution for today
     const hourlyToday: Record<number, { courtA: boolean; courtB: boolean }> = {};
@@ -72,18 +78,25 @@ export default function AdminOverview({ bookings, onNavigate }: AdminOverviewPro
       hourlyToday[h] = { courtA: false, courtB: false };
     }
     todayBookings.forEach((b) => {
-      const hour = new Date(b.start_time).getHours();
-      if (hourlyToday[hour]) {
-        if (b.court_id === "court-a") hourlyToday[hour].courtA = true;
-        else hourlyToday[hour].courtB = true;
+      const bStartHour = new Date(b.start_time).getHours();
+      const bEndHour = new Date(b.end_time).getHours();
+      // Mark ALL hours the booking spans, not just the start hour
+      for (let h = bStartHour; h < bEndHour && h < CLOSING_HOUR; h++) {
+        if (hourlyToday[h]) {
+          if (b.court_id === COURT_A_ID) hourlyToday[h].courtA = true;
+          else if (b.court_id === COURT_B_ID) hourlyToday[h].courtB = true;
+        }
       }
     });
 
-    // Peak hour
+    // Peak hour — count all occupied slot-hours, not just start hours
     const hourCounts: Record<number, number> = {};
     confirmed.forEach((b) => {
-      const h = new Date(b.start_time).getHours();
-      hourCounts[h] = (hourCounts[h] || 0) + 1;
+      const bStartHour = new Date(b.start_time).getHours();
+      const bEndHour = new Date(b.end_time).getHours();
+      for (let h = bStartHour; h < bEndHour; h++) {
+        hourCounts[h] = (hourCounts[h] || 0) + 1;
+      }
     });
     const peakHour = Object.entries(hourCounts).sort((a, b) => b[1] - a[1])[0];
 
@@ -261,13 +274,19 @@ export default function AdminOverview({ bookings, onNavigate }: AdminOverviewPro
                 const now = new Date();
                 const isCurrentHour = isToday(now) && now.getHours() === h;
 
-                // Find booking details
-                const courtABooking = stats.todayBookings.find(
-                  (b) => new Date(b.start_time).getHours() === h && b.court_id === "court-a"
-                );
-                const courtBBooking = stats.todayBookings.find(
-                  (b) => new Date(b.start_time).getHours() === h && b.court_id === "court-b"
-                );
+                // Find booking details — use overlap detection for multi-hour bookings
+                const courtABooking = stats.todayBookings.find((b) => {
+                  if (b.court_id !== COURT_A_ID) return false;
+                  const bStart = new Date(b.start_time).getHours();
+                  const bEnd = new Date(b.end_time).getHours();
+                  return bStart <= h && bEnd > h;
+                });
+                const courtBBooking = stats.todayBookings.find((b) => {
+                  if (b.court_id !== COURT_B_ID) return false;
+                  const bStart = new Date(b.start_time).getHours();
+                  const bEnd = new Date(b.end_time).getHours();
+                  return bStart <= h && bEnd > h;
+                });
 
                 return (
                   <div

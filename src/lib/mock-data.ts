@@ -1,4 +1,4 @@
-import type { Booking } from "@/lib/supabase";
+import type { Booking, GroupTraining, GroupTrainingRegistration } from "@/lib/supabase";
 import { COURT_A_ID, COURT_B_ID } from "@/lib/booking-utils";
 
 // Mock data for development (replace with Supabase queries in production)
@@ -135,3 +135,82 @@ function generateMockBookings(): Booking[] {
 }
 
 export const mockBookings = generateMockBookings();
+
+// ============================================
+// Group Trainings Mock Data
+// ============================================
+
+// Helper to get upcoming dates for mock data
+function getUpcomingDate(daysFromNow: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + daysFromNow);
+  return d.toISOString().split("T")[0];
+}
+
+export const mockGroupTrainings: GroupTraining[] = [
+  {
+    id: "gt-1",
+    age_group: "kids_5_8",
+    date: getUpcomingDate(1),
+    start_time: "16:00",
+    end_time: "17:00",
+    max_participants: 10,
+    is_active: true,
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: "gt-2",
+    age_group: "kids_5_8",
+    date: getUpcomingDate(3),
+    start_time: "16:00",
+    end_time: "17:00",
+    max_participants: 10,
+    is_active: true,
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: "gt-3",
+    age_group: "kids_8_11",
+    date: getUpcomingDate(2),
+    start_time: "17:00",
+    end_time: "18:00",
+    max_participants: 10,
+    is_active: true,
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: "gt-4",
+    age_group: "kids_8_11",
+    date: getUpcomingDate(5),
+    start_time: "17:00",
+    end_time: "18:00",
+    max_participants: 10,
+    is_active: true,
+    created_at: new Date().toISOString(),
+  },
+];
+
+export const mockGroupTrainingRegistrations: GroupTrainingRegistration[] = [
+  {
+    id: "gtr-1",
+    group_training_id: "gt-1",
+    parent_name: "Мария Иванова",
+    child_name: "Боян Иванов",
+    child_age: 6,
+    phone: "0888123456",
+    date: getUpcomingDate(1),
+    status: "confirmed",
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: "gtr-2",
+    group_training_id: "gt-1",
+    parent_name: "Георги Петров",
+    child_name: "Ана Петрова",
+    child_age: 7,
+    phone: "0899654321",
+    date: getUpcomingDate(1),
+    status: "confirmed",
+    created_at: new Date().toISOString(),
+  },
+];

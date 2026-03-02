@@ -113,11 +113,11 @@ export default function LocationSection() {
                             <div className="space-y-4 relative z-10">
                                 <div className="flex justify-between items-center pb-4 border-b border-black/5">
                                     <span className="text-gray-700 font-medium">Понеделник - Петък</span>
-                                    <span className="text-[#FF6600] font-bold text-lg bg-orange-50 px-4 py-1.5 rounded-full border border-orange-100">07:00 - 22:00</span>
+                                    <span className="text-[#FF6600] font-bold text-lg bg-orange-50 px-4 py-1.5 rounded-full border border-orange-100">08:00 - 24:00</span>
                                 </div>
-                                <div className="flex justify-between items-center pt-2">
+                                <div className="flex items-center justify-between">
                                     <span className="text-gray-700 font-medium">Събота - Неделя</span>
-                                    <span className="text-[#FF6600] font-bold text-lg bg-orange-50 px-4 py-1.5 rounded-full border border-orange-100">08:00 - 21:00</span>
+                                    <span className="text-[#FF6600] font-bold text-lg bg-orange-50 px-4 py-1.5 rounded-full border border-orange-100">08:00 - 24:00</span>
                                 </div>
                             </div>
 

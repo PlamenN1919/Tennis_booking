@@ -44,7 +44,15 @@ export const bookingSubmitSchema = z.object({
   notes: z.string().optional(),
   isRecurring: z.boolean().default(false),
   recurringWeeks: z.number().int().min(1).max(12).optional(),
-});
+  wantsBasket: z.boolean().default(false),
+  wantsRacket: z.boolean().default(false),
+}).refine(
+  (data) => {
+    const hours = parseInt(data.time.split(":")[0], 10);
+    return hours + data.durationHours <= 24;
+  },
+  { message: "Резервацията надвишава работното време (до 24:00)", path: ["durationHours"] }
+);
 
 // ============================================
 // Admin Manual Booking Schema
