@@ -10,11 +10,12 @@ import {
   ChevronRight,
   ArrowUpRight,
   Users,
+  GraduationCap,
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
-export type AdminView = "overview" | "calendar" | "bookings" | "create" | "group_trainings";
+export type AdminView = "overview" | "calendar" | "bookings" | "create" | "group_trainings" | "coaches";
 
 interface AdminSidebarProps {
   currentView: AdminView;
@@ -33,6 +34,7 @@ const navItems: { key: AdminView; label: string; icon: React.ElementType; descri
   { key: "bookings", label: "Резервации", icon: List, description: "Всички резервации" },
   { key: "create", label: "Нова резервация", icon: PlusCircle, description: "Създай ръчно" },
   { key: "group_trainings", label: "Групови тренировки", icon: Users, description: "Деца 5-8 и 8-11 г." },
+  { key: "coaches", label: "Треньори", icon: GraduationCap, description: "Управление и PIN кодове" },
 ];
 
 export default function AdminSidebar({

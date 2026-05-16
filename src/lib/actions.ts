@@ -485,6 +485,87 @@ export async function getUserCoachInfo() {
   return { coach };
 }
 
+export async function loginCoachByPin(pin: string) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl || supabaseUrl === "https://your-project.supabase.co" || supabaseUrl === "https://placeholder.supabase.co") {
+    return { error: "Supabase не е конфигуриран." };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const { data: coach, error } = await supabase
+    .from("coaches")
+    .select("id, name, specialization, hourly_rate")
+    .eq("pin", pin)
+    .single();
+
+  if (error || !coach) {
+    return { error: "Невалиден PIN код." };
+  }
+
+  return { coach };
+}
+
+export async function createCoach(formData: {
+  name: string;
+  specialization?: string;
+  hourlyRate?: number;
+  pin: string;
+}) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl || supabaseUrl === "https://your-project.supabase.co" || supabaseUrl === "https://placeholder.supabase.co") {
+    return { error: "Supabase не е конфигуриран." };
+  }
+
+  const supabase = await createServerSupabaseClient();
+
+  // Check if PIN already exists
+  const { data: existing } = await supabase
+    .from("coaches")
+    .select("id")
+    .eq("pin", formData.pin)
+    .single();
+
+  if (existing) {
+    return { error: "Този PIN код вече е зает. Изберете друг." };
+  }
+
+  const { data, error } = await supabase
+    .from("coaches")
+    .insert({
+      name: formData.name,
+      specialization: formData.specialization || null,
+      hourly_rate: formData.hourlyRate || 80,
+      pin: formData.pin,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    return { error: "Грешка при създаване на треньор." };
+  }
+
+  revalidatePath("/admin");
+  return { success: true, coach: data };
+}
+
+export async function getCoaches() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl || supabaseUrl === "https://your-project.supabase.co" || supabaseUrl === "https://placeholder.supabase.co") {
+    return [];
+  }
+  const supabase = await createServerSupabaseClient();
+  const { data } = await supabase.from("coaches").select("id, name, specialization, hourly_rate, pin, created_at").order("created_at", { ascending: false });
+  return data || [];
+}
+
+export async function deleteCoach(coachId: string) {
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase.from("coaches").delete().eq("id", coachId);
+  if (error) return { error: "Грешка при изтриване." };
+  revalidatePath("/admin");
+  return { success: true };
+}
+
 export async function getCourts() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!supabaseUrl || supabaseUrl === "https://your-project.supabase.co" || supabaseUrl === "https://placeholder.supabase.co") {
@@ -497,22 +578,6 @@ export async function getCourts() {
   const { data, error } = await supabase
     .from("courts")
     .select("*")
-    .order("name");
-
-  if (error) {
-    return [];
-  }
-
-  return data || [];
-}
-
-export async function getCoaches() {
-  const supabase = await createServerSupabaseClient();
-
-  const { data, error } = await supabase
-    .from("coaches")
-    .select("*")
-    .eq("is_active", true)
     .order("name");
 
   if (error) {

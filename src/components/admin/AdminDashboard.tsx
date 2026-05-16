@@ -20,6 +20,7 @@ import AdminCalendar from "./AdminCalendar";
 import AdminBookingsList from "./AdminBookingsList";
 import AdminCreateBooking from "./AdminCreateBooking";
 import AdminGroupTrainings from "./AdminGroupTrainings";
+import AdminCoachManager from "./AdminCoachManager";
 import type { GroupTraining, GroupTrainingRegistration } from "@/lib/supabase";
 import {
   getStoredGroupTrainings,
@@ -34,6 +35,7 @@ const viewTitles: Record<AdminView, string> = {
   bookings: "Резервации",
   create: "Нова резервация",
   group_trainings: "Групови тренировки",
+  coaches: "Треньори",
 };
 
 export default function AdminDashboard() {
@@ -228,6 +230,8 @@ export default function AdminDashboard() {
             onCancelRegistration={handleCancelGroupRegistration}
           />
         );
+      case "coaches":
+        return <AdminCoachManager />;
       default:
         return null;
     }

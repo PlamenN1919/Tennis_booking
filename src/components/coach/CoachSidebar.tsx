@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import {
   CalendarDays,
   List,
+  PlusCircle,
   ChevronLeft,
   ChevronRight,
   ArrowUpRight,
@@ -11,7 +12,7 @@ import {
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
-export type CoachView = "calendar" | "bookings" | "blocks";
+export type CoachView = "calendar" | "bookings" | "create" | "blocks";
 
 interface CoachSidebarProps {
   currentView: CoachView;
@@ -27,6 +28,7 @@ interface CoachSidebarProps {
 const navItems: { key: CoachView; label: string; icon: React.ElementType; description: string }[] = [
   { key: "calendar", label: "Календар", icon: CalendarDays, description: "Седмичен график" },
   { key: "bookings", label: "Моите резервации", icon: List, description: "Списък с уроци" },
+  { key: "create", label: "Нова резервация", icon: PlusCircle, description: "Създай ръчно" },
   { key: "blocks", label: "Почивни часове", icon: CalendarDays, description: "Блокирай график" },
 ];
 

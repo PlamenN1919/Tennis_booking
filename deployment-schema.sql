@@ -45,6 +45,7 @@ CREATE TABLE coaches (
   specialization TEXT,
   hourly_rate DECIMAL(10,2) NOT NULL DEFAULT 80.00,
   avatar_url TEXT,
+  pin TEXT UNIQUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

@@ -81,12 +81,7 @@ export default function AdminCreateBooking({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  // Auto-advance to datetime if we have prefill data
-  useEffect(() => {
-    if (prefillDate && prefillTime && prefillCourt) {
-      setStep("datetime");
-    }
-  }, [prefillDate, prefillTime, prefillCourt]);
+  // Prefill data is set via state defaults — no need to skip type step
 
   const hours = Array.from({ length: CLOSING_HOUR - OPENING_HOUR }, (_, i) => OPENING_HOUR + i);
 
