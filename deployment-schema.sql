@@ -14,7 +14,7 @@ CREATE TABLE users (
   email TEXT UNIQUE NOT NULL,
   full_name TEXT NOT NULL,
   phone TEXT,
-  role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+  role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin', 'coach')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -47,6 +47,9 @@ CREATE TABLE coaches (
   avatar_url TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Link users to coaches for the Coach Portal
+ALTER TABLE users ADD COLUMN coach_id UUID REFERENCES coaches(id) ON DELETE SET NULL;
 
 -- ============================================
 -- 4. Bookings Table with overlap prevention
@@ -126,6 +129,12 @@ CREATE POLICY "Anonymous can create bookings" ON bookings
 -- Users can cancel their own bookings
 CREATE POLICY "Users can update own bookings" ON bookings
   FOR UPDATE USING (auth.uid() = user_id);
+
+-- Coaches can update bookings assigned to them
+CREATE POLICY "Coaches can update assigned bookings" ON bookings
+  FOR UPDATE USING (
+    EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'coach' AND coach_id = bookings.coach_id)
+  );
 
 -- Admins can do everything
 CREATE POLICY "Admins full access bookings" ON bookings
@@ -241,3 +250,39 @@ CREATE TRIGGER enforce_max_participants
   BEFORE INSERT ON group_training_registrations
   FOR EACH ROW
   EXECUTE FUNCTION check_max_participants();
+
+-- ============================================
+-- 11. Coach Unavailability (Blocked Time)
+-- ============================================
+CREATE TABLE coach_unavailability (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  coach_id UUID NOT NULL REFERENCES coaches(id) ON DELETE CASCADE,
+  start_time TIMESTAMPTZ NOT NULL,
+  end_time TIMESTAMPTZ NOT NULL,
+  reason TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT valid_unavail_time CHECK (end_time > start_time)
+);
+
+ALTER TABLE coach_unavailability ENABLE ROW LEVEL SECURITY;
+
+-- Anyone can view coach unavailability
+CREATE POLICY "Anyone can view coach unavailability" ON coach_unavailability
+  FOR SELECT USING (true);
+
+-- Coaches can manage their own unavailability
+CREATE POLICY "Coaches can insert own unavailability" ON coach_unavailability
+  FOR INSERT WITH CHECK (
+    EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'coach' AND coach_id = coach_unavailability.coach_id)
+  );
+
+CREATE POLICY "Coaches can delete own unavailability" ON coach_unavailability
+  FOR DELETE USING (
+    EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'coach' AND coach_id = coach_unavailability.coach_id)
+  );
+
+-- Admins full access
+CREATE POLICY "Admins full access coach unavailability" ON coach_unavailability
+  FOR ALL USING (
+    EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'admin')
+  );

@@ -461,6 +461,30 @@ export async function getUserBookings() {
   return { bookings: data || [] };
 }
 
+export async function getUserCoachInfo() {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Не сте влезли в акаунта си." };
+
+  const { data: profile } = await supabase
+    .from("users")
+    .select("role, coach_id")
+    .eq("id", user.id)
+    .single();
+
+  if (profile?.role !== "coach" || !profile.coach_id) {
+    return { error: "Нямате достъп до треньорския портал." };
+  }
+
+  const { data: coach } = await supabase
+    .from("coaches")
+    .select("*")
+    .eq("id", profile.coach_id)
+    .single();
+
+  return { coach };
+}
+
 export async function getCourts() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!supabaseUrl || supabaseUrl === "https://your-project.supabase.co" || supabaseUrl === "https://placeholder.supabase.co") {
@@ -664,4 +688,73 @@ async function sendBookingConfirmation(data: {
       </div>
     `,
   });
+}
+
+// ============================================
+// Coach Unavailability
+// ============================================
+
+export async function createCoachBlock(startTime: string, endTime: string, reason?: string) {
+  const supabase = await createServerSupabaseClient();
+  const info = await getUserCoachInfo();
+  if (info.error || !info.coach) {
+    return { error: "Нямате права да блокирате време." };
+  }
+
+  const { data, error } = await supabase
+    .from("coach_unavailability")
+    .insert({
+      coach_id: info.coach.id,
+      start_time: startTime,
+      end_time: endTime,
+      reason: reason || null,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    return { error: "Грешка при блокиране на времето." };
+  }
+
+  revalidatePath("/coach");
+  return { success: true, block: data };
+}
+
+export async function deleteCoachBlock(blockId: string) {
+  const supabase = await createServerSupabaseClient();
+  
+  // RLS will ensure they can only delete their own
+  const { error } = await supabase
+    .from("coach_unavailability")
+    .delete()
+    .eq("id", blockId);
+
+  if (error) {
+    return { error: "Грешка при изтриване на блокираното време." };
+  }
+
+  revalidatePath("/coach");
+  return { success: true };
+}
+
+export async function getCoachBlocks(startDate: string, endDate: string, coachId?: string) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl || supabaseUrl === "https://your-project.supabase.co" || supabaseUrl === "https://placeholder.supabase.co") {
+    return [];
+  }
+  const supabase = await createServerSupabaseClient();
+  
+  let query = supabase
+    .from("coach_unavailability")
+    .select("*")
+    .gte("start_time", `${startDate}T00:00:00+00:00`)
+    .lte("start_time", `${endDate}T23:59:59+00:00`);
+    
+  if (coachId) {
+    query = query.eq("coach_id", coachId);
+  }
+
+  const { data, error } = await query;
+  if (error) return [];
+  return data;
 }
