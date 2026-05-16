@@ -13,6 +13,8 @@ import {
   Clock,
 } from "lucide-react";
 import Link from "next/link";
+import AddToCalendar from "@/components/booking/AddToCalendar";
+import { buildCalendarEvent } from "@/lib/calendar-utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -146,10 +148,19 @@ export default function BookingFlow() {
   }, [allBookings, gtVersion]);
 
   // Calculate available slots
-  const timeSlots = useMemo(
-    () => getTimeSlotsWithAvailability(selectedDate, allBookingsWithGT),
-    [selectedDate, allBookingsWithGT]
-  );
+  const timeSlots = useMemo(() => {
+    let slots = getTimeSlotsWithAvailability(selectedDate, allBookingsWithGT);
+    
+    // Filter coaching slots to 8:00 - 12:00 and 16:00 - 20:00
+    if (bookingType === "coaching_session") {
+      slots = slots.filter((slot) => {
+        const [hour] = slot.time.split(":").map(Number);
+        return (hour >= 8 && hour < 12) || (hour >= 16 && hour < 20);
+      });
+    }
+    
+    return slots;
+  }, [selectedDate, allBookingsWithGT, bookingType]);
 
   // For court_rental: user picks court (or "any" for auto-assign); for coaching: auto-assign
   const assignedCourt = useMemo(() => {
@@ -860,19 +871,7 @@ export default function BookingFlow() {
                       className="rounded-xl"
                     />
                   </div>
-                  <div>
-                    <Label htmlFor="email" className="text-sm font-medium mb-1.5">
-                      Имейл (за потвърждение)
-                    </Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={customerEmail}
-                      onChange={(e) => setCustomerEmail(e.target.value)}
-                      placeholder="ivan@email.com"
-                      className="rounded-xl"
-                    />
-                  </div>
+
                   <div>
                     <Label htmlFor="notes" className="text-sm font-medium mb-1.5">
                       Забележки (по желание)
@@ -1097,6 +1096,24 @@ export default function BookingFlow() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Add to Calendar */}
+            {selectedTime && assignedCourt && bookingType && (
+              <div className="max-w-md mx-auto w-full">
+                <AddToCalendar
+                  event={buildCalendarEvent({
+                    date: selectedDate,
+                    time: selectedTime,
+                    durationHours: effectiveDuration,
+                    courtName: assignedCourtName || "Tennis Club Oasis",
+                    bookingType,
+                    coachingLabel: selectedCoachingType ? COACHING_LABELS[selectedCoachingType] : undefined,
+                    totalPrice,
+                    customerName,
+                  })}
+                />
+              </div>
+            )}
 
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <Button

@@ -675,18 +675,7 @@ export default function AdminCreateBooking({
                   </div>
                 </div>
 
-                <div>
-                  <Label className="text-sm text-gray-600">Имейл (по избор)</Label>
-                  <div className="relative mt-1">
-                    <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <Input
-                      value={customerEmail}
-                      onChange={(e) => setCustomerEmail(e.target.value)}
-                      placeholder="ivan@email.com"
-                      className="pl-10 rounded-xl"
-                    />
-                  </div>
-                </div>
+
 
                 <div>
                   <Label className="text-sm text-gray-600">Бележки</Label>
@@ -842,11 +831,7 @@ export default function AdminCreateBooking({
                     <span className="text-xs text-gray-500 flex items-center gap-1">
                       <Phone className="w-3 h-3" /> {customerPhone}
                     </span>
-                    {customerEmail && (
-                      <span className="text-xs text-gray-500 flex items-center gap-1">
-                        <Mail className="w-3 h-3" /> {customerEmail}
-                      </span>
-                    )}
+
                   </div>
                 </div>
 

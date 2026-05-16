@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { format, isToday, isTomorrow, startOfDay } from "date-fns";
 import { bg } from "date-fns/locale";
 import {
@@ -27,6 +27,12 @@ interface AdminOverviewProps {
 }
 
 export default function AdminOverview({ bookings, onNavigate }: AdminOverviewProps) {
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const confirmed = useMemo(() => bookings.filter((b) => b.status === "confirmed"), [bookings]);
 
   const stats = useMemo(() => {
@@ -125,6 +131,14 @@ export default function AdminOverview({ bookings, onNavigate }: AdminOverviewPro
       .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
       .slice(0, 6);
   }, [confirmed]);
+
+  if (!isMounted) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="w-8 h-8 border-4 border-orange-200 border-t-orange-600 rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
