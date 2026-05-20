@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import type { Booking } from "@/lib/supabase";
 import { setCourtIds } from "@/lib/booking-utils";
-import { getCourts, getBookingsForDateRange, getCoachBlocks } from "@/lib/actions";
+import { getCourts, getBookingsForDateRange, getCoachBlocks, getGroupTrainings } from "@/lib/actions";
 import { format } from "date-fns";
 import CoachSidebar, { type CoachView } from "./CoachSidebar";
 import CoachLogin from "./CoachLogin";
@@ -18,6 +18,8 @@ import AdminCalendar from "../admin/AdminCalendar";
 import AdminBookingsList from "../admin/AdminBookingsList";
 import AdminCreateBooking from "../admin/AdminCreateBooking";
 import CoachBlocksList from "./CoachBlocksList";
+import { groupTrainingsToVirtualBookings } from "@/lib/booking-utils";
+import type { GroupTraining } from "@/lib/supabase";
 
 const viewTitles: Record<CoachView, string> = {
   calendar: "График на кортовете",
@@ -38,11 +40,18 @@ export default function CoachDashboard() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [allBookings, setAllBookings] = useState<Booking[]>([]);
+  const [groupTrainings, setGroupTrainings] = useState<GroupTraining[]>([]);
   const [coachBlocks, setCoachBlocks] = useState<any[]>([]);
   const [isHydrated, setIsHydrated] = useState(false);
   const [prefillDate, setPrefillDate] = useState<string | undefined>();
   const [prefillTime, setPrefillTime] = useState<string | undefined>();
   const [prefillCourt, setPrefillCourt] = useState<string | undefined>();
+
+  // Merge real bookings with virtual bookings generated from group trainings
+  const allBookingsWithGT = useMemo(() => {
+    const virtualBookings = groupTrainingsToVirtualBookings(groupTrainings, allBookings);
+    return [...allBookings, ...virtualBookings];
+  }, [allBookings, groupTrainings]);
 
   // Check for existing session on mount
   useEffect(() => {
@@ -82,6 +91,20 @@ export default function CoachDashboard() {
         }
       })
       .catch(() => {});
+
+    getGroupTrainings()
+      .then((data) => {
+        setGroupTrainings(data as GroupTraining[]);
+      })
+      .catch(() => {});
+  }, []);
+
+  const refreshBlocks = useCallback((id: string) => {
+    const startStr = format(new Date(), "yyyy-MM-dd");
+    const endD = new Date();
+    endD.setMonth(endD.getMonth() + 3);
+    const endStr = format(endD, "yyyy-MM-dd");
+    getCoachBlocks(startStr, endStr, id).then(setCoachBlocks);
   }, []);
 
   // Load blocks when coach changes
@@ -89,15 +112,7 @@ export default function CoachDashboard() {
     if (coach?.id) {
       refreshBlocks(coach.id);
     }
-  }, [coach]);
-
-  const refreshBlocks = (id: string) => {
-    const startStr = format(new Date(), "yyyy-MM-dd");
-    const endD = new Date();
-    endD.setMonth(endD.getMonth() + 3);
-    const endStr = format(endD, "yyyy-MM-dd");
-    getCoachBlocks(startStr, endStr, id).then(setCoachBlocks);
-  };
+  }, [coach, refreshBlocks]);
 
   const handleCancelBooking = useCallback((id: string) => {
     setAllBookings((prev) =>
@@ -162,7 +177,7 @@ export default function CoachDashboard() {
       case "calendar":
         return (
           <AdminCalendar
-            bookings={allBookings}
+            bookings={allBookingsWithGT}
             onCancelBooking={handleCancelBooking}
             onCreateFromSlot={handleCreateFromCalendar}
           />
@@ -177,11 +192,12 @@ export default function CoachDashboard() {
       case "create":
         return (
           <AdminCreateBooking
-            bookings={allBookings}
+            bookings={allBookingsWithGT}
             onBookingCreated={handleBookingCreated}
             prefillDate={prefillDate}
             prefillTime={prefillTime}
             prefillCourt={prefillCourt}
+            prefillCoachId={coach.id}
           />
         );
       case "blocks":

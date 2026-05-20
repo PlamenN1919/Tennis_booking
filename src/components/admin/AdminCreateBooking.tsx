@@ -44,7 +44,7 @@ import {
   type CoachingType,
 } from "@/lib/booking-utils";
 import { mockCourts } from "@/lib/mock-data";
-import { createBooking } from "@/lib/actions";
+import { createBooking, getCoaches } from "@/lib/actions";
 import type { Booking } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 
@@ -54,6 +54,7 @@ interface AdminCreateBookingProps {
   prefillDate?: string;
   prefillTime?: string;
   prefillCourt?: string;
+  prefillCoachId?: string;
 }
 
 type Step = "type" | "datetime" | "details" | "confirm";
@@ -64,6 +65,7 @@ export default function AdminCreateBooking({
   prefillDate,
   prefillTime,
   prefillCourt,
+  prefillCoachId,
 }: AdminCreateBookingProps) {
   const [step, setStep] = useState<Step>("type");
   const [bookingType, setBookingType] = useState<"court_rental" | "coaching_session">("court_rental");
@@ -80,6 +82,18 @@ export default function AdminCreateBooking({
   const [recurringWeeks, setRecurringWeeks] = useState(4);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+
+  const [coaches, setCoaches] = useState<any[]>([]);
+  const [selectedCoachId, setSelectedCoachId] = useState<string>(prefillCoachId || "");
+
+  useEffect(() => {
+    getCoaches().then((data) => {
+      setCoaches(data);
+      if (data && data.length > 0 && !prefillCoachId) {
+        setSelectedCoachId(data[0].id);
+      }
+    });
+  }, [prefillCoachId]);
 
   // Prefill data is set via state defaults — no need to skip type step
 
@@ -176,26 +190,45 @@ export default function AdminCreateBooking({
       const weekEnd = new Date(endTime);
       weekEnd.setDate(weekEnd.getDate() + week * 7);
 
-      // Check availability: does any existing booking overlap on this court?
+      // Check availability: does any existing booking overlap on this court or with this coach?
       const mergedBookings = [...bookings, ...allNewBookings];
-      const hasConflict = mergedBookings.some((b) => {
-        if (b.court_id !== selectedCourt || b.status === "cancelled") return false;
+      
+      const hasCourtConflict = mergedBookings.some((b) => {
+        if (b.status === "cancelled") return false;
+        if (b.court_id !== selectedCourt) return false;
         const bStart = new Date(b.start_time);
         const bEnd = new Date(b.end_time);
         return bStart < weekEnd && bEnd > weekStart;
       });
 
-      if (hasConflict) {
+      if (hasCourtConflict) {
         const conflictDate = weekStart.toLocaleDateString("bg-BG");
         alert(`Кортът е вече зает на ${conflictDate} (седмица ${week + 1}). Моля, изберете друг час.`);
         return;
+      }
+
+      if (bookingType === "coaching_session" && selectedCoachId) {
+        const hasCoachConflict = mergedBookings.some((b) => {
+          if (b.status === "cancelled") return false;
+          if (b.coach_id !== selectedCoachId) return false;
+          const bStart = new Date(b.start_time);
+          const bEnd = new Date(b.end_time);
+          return bStart < weekEnd && bEnd > weekStart;
+        });
+
+        if (hasCoachConflict) {
+          const conflictDate = weekStart.toLocaleDateString("bg-BG");
+          const coachName = coaches.find(c => c.id === selectedCoachId)?.name || "Треньорът";
+          alert(`${coachName} е зает на ${conflictDate} (седмица ${week + 1}). Моля, изберете друг час или треньор.`);
+          return;
+        }
       }
 
       const newBooking: Booking = {
         id: `admin-${Date.now()}-${week}`,
         user_id: "admin",
         court_id: selectedCourt,
-        coach_id: bookingType === "coaching_session" ? "coach-1" : null,
+        coach_id: bookingType === "coaching_session" ? selectedCoachId || null : null,
         start_time: weekStart.toISOString(),
         end_time: weekEnd.toISOString(),
         booking_type: bookingType,
@@ -223,7 +256,7 @@ export default function AdminCreateBooking({
         time: selectedTime,
         durationHours,
         courtId: selectedCourt,
-        coachId: bookingType === "coaching_session" ? "coach-1" : null,
+        coachId: bookingType === "coaching_session" ? selectedCoachId || null : null,
         customerName,
         customerEmail: customerEmail || undefined,
         customerPhone,
@@ -445,10 +478,32 @@ export default function AdminCreateBooking({
                 </div>
               )}
 
+              {/* Coach Selection (Bug #3) */}
+              {bookingType === "coaching_session" && !prefillCoachId && coaches.length > 0 && (
+                <div className="mt-6">
+                  <Label className="text-sm font-semibold text-gray-700 mb-3 block">Изберете треньор</Label>
+                  <Select
+                    value={selectedCoachId}
+                    onValueChange={setSelectedCoachId}
+                  >
+                    <SelectTrigger className="w-full rounded-xl bg-white border border-gray-200">
+                      <SelectValue placeholder="Изберете треньор" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {coaches.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               <Button
                 onClick={() => setStep("datetime")}
                 className="w-full mt-6 bg-orange-600 hover:bg-orange-700 text-white rounded-full h-11"
-                disabled={bookingType === "coaching_session" && !selectedCoachingType}
+                disabled={bookingType === "coaching_session" && (!selectedCoachingType || !selectedCoachId)}
               >
                 Продължи
               </Button>

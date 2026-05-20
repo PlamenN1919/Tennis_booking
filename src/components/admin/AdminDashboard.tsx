@@ -23,11 +23,13 @@ import AdminGroupTrainings from "./AdminGroupTrainings";
 import AdminCoachManager from "./AdminCoachManager";
 import type { GroupTraining, GroupTrainingRegistration } from "@/lib/supabase";
 import {
-  getStoredGroupTrainings,
-  saveGroupTrainings,
-  getStoredRegistrations,
-  saveRegistrations,
-} from "@/lib/group-training-storage";
+  getGroupTrainings,
+  getGroupRegistrations,
+  createGroupTrainingAction,
+  deleteGroupTrainingAction,
+  toggleGroupTrainingAction,
+  cancelGroupRegistrationAction,
+} from "@/lib/actions";
 
 const viewTitles: Record<AdminView, string> = {
   overview: "Табло",
@@ -43,8 +45,8 @@ export default function AdminDashboard() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [allBookings, setAllBookings] = useState<Booking[]>(() => getStoredBookings());
-  const [groupTrainings, setGroupTrainings] = useState<GroupTraining[]>(() => getStoredGroupTrainings());
-  const [groupRegistrations, setGroupRegistrations] = useState<GroupTrainingRegistration[]>(() => getStoredRegistrations());
+  const [groupTrainings, setGroupTrainings] = useState<GroupTraining[]>([]);
+  const [groupRegistrations, setGroupRegistrations] = useState<GroupTrainingRegistration[]>([]);
   
   // Add hydration flag to avoid SSR/client mismatch for date-based calculations
   const [isHydrated, setIsHydrated] = useState(false);
@@ -101,16 +103,19 @@ export default function AdminDashboard() {
       .catch(() => {
         // Supabase not available — keep using stored bookings
       });
+
+    getGroupTrainings()
+      .then((data) => {
+        setGroupTrainings(data as GroupTraining[]);
+      })
+      .catch(() => {});
+
+    getGroupRegistrations()
+      .then((data) => {
+        setGroupRegistrations(data as GroupTrainingRegistration[]);
+      })
+      .catch(() => {});
   }, []);
-
-  // Persist group trainings to localStorage whenever they change
-  useEffect(() => {
-    saveGroupTrainings(groupTrainings);
-  }, [groupTrainings]);
-
-  useEffect(() => {
-    saveRegistrations(groupRegistrations);
-  }, [groupRegistrations]);
 
   // Persist real and local bookings to localStorage whenever they change
   useEffect(() => {
@@ -118,24 +123,6 @@ export default function AdminDashboard() {
   }, [allBookings]);
 
   // Listen for booking changes from booking flow
-  useEffect(() => {
-    const handleBookingsUpdate = (e: Event) => {
-      const detail = (e as CustomEvent).detail as Booking[];
-      setAllBookings(detail);
-    };
-    window.addEventListener("bookings-updated", handleBookingsUpdate);
-    return () => window.removeEventListener("bookings-updated", handleBookingsUpdate);
-  }, []);
-
-  // Listen for registration changes from user-facing calendar
-  useEffect(() => {
-    const handleRegistrationsUpdate = (e: Event) => {
-      const detail = (e as CustomEvent).detail as GroupTrainingRegistration[];
-      setGroupRegistrations(detail);
-    };
-    window.addEventListener("group-registrations-updated", handleRegistrationsUpdate);
-    return () => window.removeEventListener("group-registrations-updated", handleRegistrationsUpdate);
-  }, []);
 
   // Prefill state for creating from calendar
   const [prefillDate, setPrefillDate] = useState<string | undefined>();
@@ -191,25 +178,72 @@ export default function AdminDashboard() {
   }, []);
 
   // Group training handlers
-  const handleAddGroupTraining = useCallback((training: GroupTraining) => {
-    setGroupTrainings((prev) => [...prev, training]);
+  const handleAddGroupTraining = useCallback(async (training: GroupTraining) => {
+    try {
+      const result = await createGroupTrainingAction({
+        ageGroup: training.age_group,
+        date: training.date,
+        startTime: training.start_time,
+        endTime: training.end_time,
+        maxParticipants: training.max_participants || 10,
+      });
+      if (result && "error" in result && result.error) {
+        alert(result.error);
+        return;
+      }
+      const updatedTrainings = await getGroupTrainings();
+      setGroupTrainings(updatedTrainings as GroupTraining[]);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "";
+      alert("Възникна грешка при създаване на групова тренировка: " + msg);
+    }
   }, []);
 
-  const handleRemoveGroupTraining = useCallback((id: string) => {
-    setGroupTrainings((prev) => prev.filter((t) => t.id !== id));
-    setGroupRegistrations((prev) => prev.filter((r) => r.group_training_id !== id));
+  const handleRemoveGroupTraining = useCallback(async (id: string) => {
+    try {
+      const result = await deleteGroupTrainingAction(id);
+      if (result && "error" in result && result.error) {
+        alert(result.error);
+        return;
+      }
+      const updatedTrainings = await getGroupTrainings();
+      setGroupTrainings(updatedTrainings as GroupTraining[]);
+      const updatedRegs = await getGroupRegistrations();
+      setGroupRegistrations(updatedRegs as GroupTrainingRegistration[]);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "";
+      alert("Възникна грешка при изтриване: " + msg);
+    }
   }, []);
 
-  const handleToggleGroupTraining = useCallback((id: string) => {
-    setGroupTrainings((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, is_active: !t.is_active } : t))
-    );
+  const handleToggleGroupTraining = useCallback(async (id: string) => {
+    try {
+      const result = await toggleGroupTrainingAction(id);
+      if (result && "error" in result && result.error) {
+        alert(result.error);
+        return;
+      }
+      const updatedTrainings = await getGroupTrainings();
+      setGroupTrainings(updatedTrainings as GroupTraining[]);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "";
+      alert("Възникна грешка при промяна на статуса: " + msg);
+    }
   }, []);
 
-  const handleCancelGroupRegistration = useCallback((id: string) => {
-    setGroupRegistrations((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: "cancelled" as const } : r))
-    );
+  const handleCancelGroupRegistration = useCallback(async (id: string) => {
+    try {
+      const result = await cancelGroupRegistrationAction(id);
+      if (result && "error" in result && result.error) {
+        alert(result.error);
+        return;
+      }
+      const updatedRegs = await getGroupRegistrations();
+      setGroupRegistrations(updatedRegs as GroupTrainingRegistration[]);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "";
+      alert("Възникна грешка при отмяна на регистрацията: " + msg);
+    }
   }, []);
 
   // Calculate stats only after hydration to avoid SSR/client mismatches

@@ -26,10 +26,10 @@ import type {
 } from "@/lib/supabase";
 import { AGE_GROUP_LABELS, DAY_NAMES_BG } from "@/lib/supabase";
 import {
-  getStoredGroupTrainings,
-  getStoredRegistrations,
-  saveRegistrations,
-} from "@/lib/group-training-storage";
+  getGroupTrainings,
+  getGroupRegistrations,
+  registerForGroupTrainingAction,
+} from "@/lib/actions";
 
 function getWeekDates(baseDate: Date): Date[] {
   const start = new Date(baseDate);
@@ -86,37 +86,16 @@ export default function GroupTrainingCalendar() {
   const [justRegistered, setJustRegistered] = useState(false);
   const [filterAge, setFilterAge] = useState<AgeGroup | "all">("all");
 
-  // Read from shared localStorage so admin-created trainings appear here
-  const [trainings, setTrainings] = useState<GroupTraining[]>(() => getStoredGroupTrainings());
-  const [registrations, setRegistrations] = useState<
-    GroupTrainingRegistration[]
-  >(() => getStoredRegistrations());
+  const [trainings, setTrainings] = useState<GroupTraining[]>([]);
+  const [registrations, setRegistrations] = useState<GroupTrainingRegistration[]>([]);
 
-  // Listen for changes from admin panel (same tab via custom events)
   useEffect(() => {
-    const handleTrainingsUpdate = (e: Event) => {
-      const detail = (e as CustomEvent).detail as GroupTraining[];
-      setTrainings(detail);
-    };
-    const handleRegistrationsUpdate = (e: Event) => {
-      const detail = (e as CustomEvent).detail as GroupTrainingRegistration[];
-      setRegistrations(detail);
-    };
-    window.addEventListener("group-trainings-updated", handleTrainingsUpdate);
-    window.addEventListener("group-registrations-updated", handleRegistrationsUpdate);
-
-    // Also re-read on focus (covers navigating back from admin)
-    const handleFocus = () => {
-      setTrainings(getStoredGroupTrainings());
-      setRegistrations(getStoredRegistrations());
-    };
-    window.addEventListener("focus", handleFocus);
-
-    return () => {
-      window.removeEventListener("group-trainings-updated", handleTrainingsUpdate);
-      window.removeEventListener("group-registrations-updated", handleRegistrationsUpdate);
-      window.removeEventListener("focus", handleFocus);
-    };
+    getGroupTrainings().then((data) => {
+      setTrainings(data as GroupTraining[]);
+    });
+    getGroupRegistrations().then((data) => {
+      setRegistrations(data as GroupTrainingRegistration[]);
+    });
   }, []);
 
   const weekDates = useMemo(
@@ -160,36 +139,40 @@ export default function GroupTrainingCalendar() {
     setCurrentWeekStart(new Date());
   };
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     if (!selectedTraining) return;
 
     const { training, date } = selectedTraining;
     const dateStr = training.date;
     const currentCount = getRegistrationCount(training.id, dateStr);
 
-    if (currentCount >= training.max_participants) return;
+    if (currentCount >= training.max_participants) {
+      alert("Групата е запълнена.");
+      return;
+    }
 
     setIsSubmitting(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      const newReg: GroupTrainingRegistration = {
-        id: `gtr-${Date.now()}`,
-        group_training_id: training.id,
-        parent_name: registrationForm.parentName,
-        child_name: registrationForm.childName,
-        child_age: parseInt(registrationForm.childAge),
-        phone: registrationForm.phone,
+    try {
+      const result = await registerForGroupTrainingAction({
+        groupTrainingId: training.id,
         date: dateStr,
-        status: "confirmed",
-        created_at: new Date().toISOString(),
-      };
-
-      setRegistrations((prev) => {
-        const updated = [...prev, newReg];
-        saveRegistrations(updated);
-        return updated;
+        parentName: registrationForm.parentName,
+        childName: registrationForm.childName,
+        childAge: parseInt(registrationForm.childAge),
+        phone: registrationForm.phone,
       });
+
+      if (result && "error" in result && result.error) {
+        alert(result.error);
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Reload registrations from database
+      const updatedRegs = await getGroupRegistrations();
+      setRegistrations(updatedRegs as GroupTrainingRegistration[]);
+
       setIsSubmitting(false);
       setJustRegistered(true);
       setRegistrationForm({
@@ -203,7 +186,11 @@ export default function GroupTrainingCalendar() {
         setJustRegistered(false);
         setSelectedTraining(null);
       }, 3000);
-    }, 800);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "";
+      alert("Възникна грешка при регистрацията: " + msg);
+      setIsSubmitting(false);
+    }
   };
 
   const isFormValid =

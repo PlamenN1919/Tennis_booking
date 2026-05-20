@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { bookingSubmitSchema } from "@/lib/validations";
 import { revalidatePath } from "next/cache";
 import { v4 as uuidv4 } from "uuid";
+import { format } from "date-fns";
 
 // ============================================
 // Booking Actions
@@ -61,15 +62,20 @@ export async function createBooking(formData: {
 
     const maxDaily = profile?.max_daily_bookings || 3;
 
-    const { count } = await supabase
+    // Fetch confirmed bookings for this user to check daily limit locally using Sofia timezone
+    const { data: userBookings } = await supabase
       .from("bookings")
-      .select("*", { count: "exact", head: true })
+      .select("start_time")
       .eq("user_id", userId)
-      .eq("status", "confirmed")
-      .gte("start_time", `${data.date}T00:00:00`)
-      .lte("start_time", `${data.date}T23:59:59`);
+      .eq("status", "confirmed");
 
-    if ((count || 0) >= maxDaily) {
+    const bookingsOnDay = (userBookings || []).filter((b) => {
+      const d = new Date(b.start_time);
+      const sofiaDateStr = d.toLocaleDateString("en-CA", { timeZone: "Europe/Sofia" });
+      return sofiaDateStr === data.date;
+    });
+
+    if (bookingsOnDay.length >= maxDaily) {
       return {
         error: `Достигнахте лимита от ${maxDaily} резервации на ден.`,
       };
@@ -103,6 +109,7 @@ export async function createBooking(formData: {
 
     // Check coach availability
     if (data.bookingType === "coaching_session" && data.coachId) {
+      // 1. Check other conflicting bookings
       const { data: conflictingCoach } = await supabase
         .from("bookings")
         .select("id")
@@ -114,6 +121,19 @@ export async function createBooking(formData: {
       if (conflictingCoach && conflictingCoach.length > 0) {
         const formattedDate = weekStartTime.toLocaleDateString('bg-BG');
         return { error: `Треньорът е вече зает на ${formattedDate}. Моля, изберете друг час за поредицата.` };
+      }
+
+      // 2. Check coach unavailability blocks (Bug #2)
+      const { data: unavailableCoach } = await supabase
+        .from("coach_unavailability")
+        .select("id")
+        .eq("coach_id", data.coachId)
+        .lt("start_time", weekEndTime.toISOString())
+        .gt("end_time", weekStartTime.toISOString());
+
+      if (unavailableCoach && unavailableCoach.length > 0) {
+        const formattedDate = weekStartTime.toLocaleDateString('bg-BG');
+        return { error: `Треньорът не е на разположение на ${formattedDate} (маркиран почивен час).` };
       }
     }
 
@@ -131,11 +151,12 @@ export async function createBooking(formData: {
       return { error: `Кортът е вече зает на ${formattedDate}. Моля, изберете друг час за поредицата.` };
     }
 
-    // Check group training conflicts on the same court
+    // Check group training conflicts on the same court (Bug #1: query current week's date)
+    const currentWeekDateStr = format(weekStartTime, "yyyy-MM-dd");
     const { data: activeGTs } = await supabase
       .from("group_trainings")
       .select("*")
-      .eq("date", data.date)
+      .eq("date", currentWeekDateStr)
       .eq("is_active", true);
 
     if (activeGTs && activeGTs.length > 0) {
@@ -830,4 +851,153 @@ export async function getCoachBlocks(startDate: string, endDate: string, coachId
   const { data, error } = await query;
   if (error) return [];
   return data;
+}
+
+// ============================================
+// Group Training Actions (Bug #5)
+// ============================================
+
+export async function getGroupTrainings() {
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase
+    .from("group_trainings")
+    .select("*")
+    .order("date", { ascending: true })
+    .order("start_time", { ascending: true });
+  if (error) {
+    console.error("Error fetching group trainings:", error);
+    return [];
+  }
+  return data || [];
+}
+
+export async function getGroupRegistrations() {
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase
+    .from("group_training_registrations")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.error("Error fetching group registrations:", error);
+    return [];
+  }
+  return data || [];
+}
+
+export async function createGroupTrainingAction(formData: {
+  ageGroup: "kids_5_8" | "kids_8_11";
+  date: string;
+  startTime: string;
+  endTime: string;
+  maxParticipants: number;
+}) {
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase
+    .from("group_trainings")
+    .insert({
+      age_group: formData.ageGroup,
+      date: formData.date,
+      start_time: formData.startTime,
+      end_time: formData.endTime,
+      max_participants: formData.maxParticipants,
+    })
+    .select()
+    .single();
+  if (error) {
+    console.error("Error creating group training:", error);
+    return { error: "Грешка при създаване на групова тренировка." };
+  }
+  revalidatePath("/booking");
+  revalidatePath("/admin");
+  return { success: true, training: data };
+}
+
+export async function deleteGroupTrainingAction(id: string) {
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase
+    .from("group_trainings")
+    .delete()
+    .eq("id", id);
+  if (error) {
+    console.error("Error deleting group training:", error);
+    return { error: "Грешка при изтриване на групова тренировка." };
+  }
+  revalidatePath("/booking");
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+export async function toggleGroupTrainingAction(id: string, isActive?: boolean) {
+  const supabase = await createServerSupabaseClient();
+  let targetActive = isActive;
+  if (targetActive === undefined) {
+    const { data, error: fetchErr } = await supabase
+      .from("group_trainings")
+      .select("is_active")
+      .eq("id", id)
+      .single();
+    if (fetchErr || !data) {
+      console.error("Error fetching group training to toggle:", fetchErr);
+      return { error: "Неуспешно намиране на тренировката." };
+    }
+    targetActive = !data.is_active;
+  }
+
+  const { error } = await supabase
+    .from("group_trainings")
+    .update({ is_active: targetActive })
+    .eq("id", id);
+  if (error) {
+    console.error("Error toggling group training:", error);
+    return { error: "Грешка при промяна на статуса." };
+  }
+  revalidatePath("/booking");
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+export async function registerForGroupTrainingAction(formData: {
+  groupTrainingId: string;
+  parentName: string;
+  childName: string;
+  childAge: number;
+  phone: string;
+  date: string;
+}) {
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase
+    .from("group_training_registrations")
+    .insert({
+      group_training_id: formData.groupTrainingId,
+      parent_name: formData.parentName,
+      child_name: formData.childName,
+      child_age: formData.childAge,
+      phone: formData.phone,
+      date: formData.date,
+      status: "confirmed",
+    })
+    .select()
+    .single();
+  if (error) {
+    console.error("Error creating group training registration:", error);
+    return { error: error.message || "Грешка при записване за тренировка." };
+  }
+  revalidatePath("/booking");
+  revalidatePath("/admin");
+  return { success: true, registration: data };
+}
+
+export async function cancelGroupRegistrationAction(id: string) {
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase
+    .from("group_training_registrations")
+    .update({ status: "cancelled" })
+    .eq("id", id);
+  if (error) {
+    console.error("Error cancelling registration:", error);
+    return { error: "Грешка при отмяна на регистрацията." };
+  }
+  revalidatePath("/booking");
+  revalidatePath("/admin");
+  return { success: true };
 }
