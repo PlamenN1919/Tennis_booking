@@ -106,10 +106,21 @@ export default function BookingFlow() {
 
     getBookingsForDateRange(startStr, endStr)
       .then((serverBookings) => {
-        if (serverBookings.length > 0) {
-          setAllBookings(serverBookings);
-          saveBookings(serverBookings);
-        }
+        const localBookings = getStoredBookings();
+        const unsyncedBookings = localBookings.filter(
+          (b) => b.id.startsWith("booking-") || b.id.startsWith("admin-")
+        );
+
+        // Combine server bookings with unsynced local bookings (Smart Merge)
+        const mergedBookings = [...serverBookings];
+        unsyncedBookings.forEach((localB) => {
+          if (!mergedBookings.some((b) => b.id === localB.id)) {
+            mergedBookings.push(localB);
+          }
+        });
+
+        setAllBookings(mergedBookings);
+        saveBookings(mergedBookings);
       })
       .catch(() => {
         // Supabase not available — keep using stored bookings

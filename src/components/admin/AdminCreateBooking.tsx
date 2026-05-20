@@ -245,9 +245,14 @@ export default function AdminCreateBooking({
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "";
-      if (!message.includes("Supabase not configured")) {
+      if (message.includes("Supabase not configured") || message.includes("using local mock")) {
+        console.log("Using local mock mode due to unconfigured Supabase");
+      } else {
+        // Real server/database exception — abort and show error!
         console.error("Admin booking server error:", err);
-        // Continue with local-only mode
+        alert(`Нещо се обърка при запис в базата данни: ${message || "Непозната грешка"}. Резервацията не беше създадена.`);
+        setIsSubmitting(false);
+        return;
       }
     }
 

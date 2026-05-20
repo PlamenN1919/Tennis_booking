@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { mockBookings } from "@/lib/mock-data";
 import type { Booking } from "@/lib/supabase";
 import { groupTrainingsToVirtualBookings, setCourtIds } from "@/lib/booking-utils";
-import { getCourts, getBookingsForDateRange } from "@/lib/actions";
+import { getCourts, getBookingsForDateRange, cancelBooking } from "@/lib/actions";
 import { getStoredBookings, saveBookings } from "@/lib/booking-storage";
 import { format } from "date-fns";
 import AdminSidebar, { type AdminView } from "./AdminSidebar";
@@ -82,10 +82,21 @@ export default function AdminDashboard() {
 
     getBookingsForDateRange(format(start, "yyyy-MM-dd"), format(end, "yyyy-MM-dd"))
       .then((serverBookings) => {
-        if (serverBookings.length > 0) {
-          setAllBookings(serverBookings);
-          saveBookings(serverBookings);
-        }
+        const localBookings = getStoredBookings();
+        const unsyncedBookings = localBookings.filter(
+          (b) => b.id.startsWith("admin-") || b.id.startsWith("booking-")
+        );
+
+        // Combine server bookings with unsynced local bookings (Smart Merge)
+        const mergedBookings = [...serverBookings];
+        unsyncedBookings.forEach((localB) => {
+          if (!mergedBookings.some((b) => b.id === localB.id)) {
+            mergedBookings.push(localB);
+          }
+        });
+
+        setAllBookings(mergedBookings);
+        saveBookings(mergedBookings);
       })
       .catch(() => {
         // Supabase not available — keep using stored bookings
@@ -100,6 +111,11 @@ export default function AdminDashboard() {
   useEffect(() => {
     saveRegistrations(groupRegistrations);
   }, [groupRegistrations]);
+
+  // Persist real and local bookings to localStorage whenever they change
+  useEffect(() => {
+    saveBookings(allBookings);
+  }, [allBookings]);
 
   // Listen for booking changes from booking flow
   useEffect(() => {
@@ -127,9 +143,32 @@ export default function AdminDashboard() {
   const [prefillCourt, setPrefillCourt] = useState<string | undefined>();
 
   const handleCancelBooking = useCallback((id: string) => {
+    // 1. Immediately update local state (optimistic update)
     setAllBookings((prev) =>
       prev.map((b) => (b.id === id ? { ...b, status: "cancelled" as const } : b))
     );
+
+    // 2. If it's a real server booking (doesn't start with admin- or booking-), sync cancellation to database
+    if (!id.startsWith("admin-") && !id.startsWith("booking-")) {
+      cancelBooking(id)
+        .then((result) => {
+          if (result && "error" in result && result.error) {
+            alert(`Грешка при отмяна в базата данни: ${result.error}`);
+            // Rollback optimistic update
+            setAllBookings((prev) =>
+              prev.map((b) => (b.id === id ? { ...b, status: "confirmed" as const } : b))
+            );
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to cancel booking on server:", err);
+          alert("Неуспешно свързване със сървъра за отмяна на резервацията.");
+          // Rollback optimistic update
+          setAllBookings((prev) =>
+            prev.map((b) => (b.id === id ? { ...b, status: "confirmed" as const } : b))
+          );
+        });
+    }
   }, []);
 
   const handleBookingCreated = useCallback((booking: Booking) => {

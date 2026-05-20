@@ -277,18 +277,21 @@ export async function cancelBooking(bookingId: string) {
   }
 
   // Check permission (user can cancel own, admin can cancel any)
-  if (!user) {
-    return { error: "Трябва да сте влезли в акаунта си, за да отмените резервация." };
-  }
+  if (user) {
+    const { data: profile } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", user.id)
+      .single();
 
-  const { data: profile } = await supabase
-    .from("users")
-    .select("role")
-    .eq("id", user.id)
-    .single();
-
-  if (profile?.role !== "admin" && booking.user_id !== user.id) {
-    return { error: "Нямате право да отмените тази резервация." };
+    if (profile?.role !== "admin" && booking.user_id !== user.id) {
+      return { error: "Нямате право да отмените тази резервация." };
+    }
+  } else {
+    // Guest cancellation: only allowed if the booking has no user_id (anonymous/guest booking)
+    if (booking.user_id !== null) {
+      return { error: "Трябва да сте влезли в акаунта си, за да отмените тази резервация." };
+    }
   }
 
   // Check if booking is in the past
@@ -320,20 +323,18 @@ export async function cancelRecurringBookings(recurringGroupId: string) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    return { error: "Трябва да сте влезли в акаунта си." };
+  let isAdmin = false;
+  if (user) {
+    const { data: profile } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    isAdmin = profile?.role === "admin";
   }
 
-  // Check if user owns these bookings or is admin
-  const { data: profile } = await supabase
-    .from("users")
-    .select("role")
-    .eq("id", user.id)
-    .single();
-
-  const isAdmin = profile?.role === "admin";
-
-  // Verify ownership: at least one booking in the group must belong to this user
+  // Verify ownership: if not admin, ensure the user owns the booking or it is an anonymous booking (when guest)
   if (!isAdmin) {
     const { data: groupBookings } = await supabase
       .from("bookings")
@@ -345,8 +346,15 @@ export async function cancelRecurringBookings(recurringGroupId: string) {
       return { error: "Повтарящата се резервация не е намерена." };
     }
 
-    if (groupBookings[0].user_id !== user.id) {
-      return { error: "Нямате право да отмените тази поредица резервации." };
+    if (user) {
+      if (groupBookings[0].user_id !== user.id) {
+        return { error: "Нямате право да отмените тази поредица резервации." };
+      }
+    } else {
+      // Guest: only allow if it is an anonymous recurring group
+      if (groupBookings[0].user_id !== null) {
+        return { error: "Трябва да сте влезли в акаунта си, за да отмените тази поредица." };
+      }
     }
   }
 
