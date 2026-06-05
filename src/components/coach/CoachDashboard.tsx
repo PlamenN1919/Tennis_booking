@@ -82,7 +82,7 @@ export default function CoachDashboard() {
     const start = new Date(today);
     start.setDate(start.getDate() - 30);
     const end = new Date(today);
-    end.setDate(end.getDate() + 30);
+    end.setDate(end.getDate() + 180);
 
     getBookingsForDateRange(format(start, "yyyy-MM-dd"), format(end, "yyyy-MM-dd"))
       .then((serverBookings) => {
