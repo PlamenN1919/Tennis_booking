@@ -77,6 +77,15 @@ export default function BookingFlow() {
   const [wantsRacket, setWantsRacket] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bookingConfirmed, setBookingConfirmed] = useState(false);
+  const [confirmedBooking, setConfirmedBooking] = useState<{
+    date: Date;
+    time: string;
+    duration: number;
+    courtName: string;
+    price: number;
+    bookingType: BookingType;
+    coachingType: CoachingType | null;
+  } | null>(null);
 
   // All bookings (stored + new ones created in this session)
   const [allBookings, setAllBookings] = useState<Booking[]>(() => getStoredBookings());
@@ -334,6 +343,19 @@ export default function BookingFlow() {
       // Server persisted — update local state and storage for immediate UI feedback
       const serverBookingId = result?.booking?.id;
       const newBooking = buildLocalBooking(serverBookingId);
+      
+      const finalCourtName = courts.find((c) => c.id === assignedCourt)?.name || "Корт A";
+
+      setConfirmedBooking({
+        date: selectedDate,
+        time: selectedTime,
+        duration: effectiveDuration,
+        courtName: finalCourtName,
+        price: totalPrice,
+        bookingType,
+        coachingType: selectedCoachingType,
+      });
+
       setAllBookings((prev) => [...prev, newBooking]);
       addStoredBooking(newBooking);
       setBookingConfirmed(true);
@@ -343,6 +365,19 @@ export default function BookingFlow() {
       const message = err instanceof Error ? err.message : "";
       if (message.includes("Supabase not configured")) {
         const newBooking = buildLocalBooking();
+        
+        const finalCourtName = courts.find((c) => c.id === assignedCourt)?.name || "Корт A";
+
+        setConfirmedBooking({
+          date: selectedDate,
+          time: selectedTime,
+          duration: effectiveDuration,
+          courtName: finalCourtName,
+          price: totalPrice,
+          bookingType,
+          coachingType: selectedCoachingType,
+        });
+
         setAllBookings((prev) => [...prev, newBooking]);
         addStoredBooking(newBooking);
         setBookingConfirmed(true);
@@ -370,6 +405,7 @@ export default function BookingFlow() {
     setWantsBasket(false);
     setWantsRacket(false);
     setBookingConfirmed(false);
+    setConfirmedBooking(null);
   };
 
   const isGroupTraining = selectedCoachingType === "kids_5_8" || selectedCoachingType === "kids_8_11";
@@ -1082,7 +1118,7 @@ export default function BookingFlow() {
         )}
 
         {/* Step 4: Confirmation */}
-        {currentStep === "confirmation" && bookingConfirmed && (
+        {currentStep === "confirmation" && bookingConfirmed && confirmedBooking && (
           <div className="max-w-md mx-auto text-center space-y-6 py-12">
             <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto">
               <CheckCircle2 className="w-10 h-10 text-green-600" />
@@ -1100,49 +1136,47 @@ export default function BookingFlow() {
               <CardContent className="p-6 space-y-3">
                 <div className="flex justify-between">
                   <span className="text-gray-500">Дата:</span>
-                  <span className="font-medium">{formatDateBG(selectedDate)}</span>
+                  <span className="font-medium">{formatDateBG(confirmedBooking.date)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Час:</span>
                   <span className="font-medium">
-                    {selectedTime && formatTimeRange(selectedTime, effectiveDuration)}
+                    {formatTimeRange(confirmedBooking.time, confirmedBooking.duration)}
                   </span>
                 </div>
-                {bookingType === "court_rental" && (
+                {confirmedBooking.bookingType === "court_rental" && (
                   <div className="flex justify-between">
                     <span className="text-gray-500">Продължителност:</span>
-                    <span className="font-medium">{effectiveDuration} {effectiveDuration === 1 ? "час" : "часа"}</span>
+                    <span className="font-medium">{confirmedBooking.duration} {confirmedBooking.duration === 1 ? "час" : "часа"}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
                   <span className="text-gray-500">Корт:</span>
-                  <span className="font-medium">{assignedCourtName}</span>
+                  <span className="font-medium">{confirmedBooking.courtName}</span>
                 </div>
                 <Separator />
                 <div className="flex justify-between">
                   <span className="text-gray-500">Цена:</span>
-                  <span className="font-bold text-lg">{totalPrice}€</span>
+                  <span className="font-bold text-lg">{confirmedBooking.price}€</span>
                 </div>
               </CardContent>
             </Card>
 
             {/* Add to Calendar */}
-            {selectedTime && assignedCourt && bookingType && (
-              <div className="max-w-md mx-auto w-full">
-                <AddToCalendar
-                  event={buildCalendarEvent({
-                    date: selectedDate,
-                    time: selectedTime,
-                    durationHours: effectiveDuration,
-                    courtName: assignedCourtName || "Tennis Club Oasis",
-                    bookingType,
-                    coachingLabel: selectedCoachingType ? COACHING_LABELS[selectedCoachingType] : undefined,
-                    totalPrice,
-                    customerName,
-                  })}
-                />
-              </div>
-            )}
+            <div className="max-w-md mx-auto w-full">
+              <AddToCalendar
+                event={buildCalendarEvent({
+                  date: confirmedBooking.date,
+                  time: confirmedBooking.time,
+                  durationHours: confirmedBooking.duration,
+                  courtName: confirmedBooking.courtName || "Tennis Club Oasis",
+                  bookingType: confirmedBooking.bookingType,
+                  coachingLabel: confirmedBooking.coachingType ? COACHING_LABELS[confirmedBooking.coachingType] : undefined,
+                  totalPrice: confirmedBooking.price,
+                  customerName,
+                })}
+              />
+            </div>
 
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <Button
