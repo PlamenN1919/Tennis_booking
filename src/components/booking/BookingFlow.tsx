@@ -96,13 +96,17 @@ export default function BookingFlow() {
     }).catch(() => {
       // Supabase not available — keep using mock court IDs
     });
+  }, []);
 
-    // Try loading real bookings from server (30-day window)
-    const today = new Date();
-    const startStr = format(today, "yyyy-MM-dd");
-    const endDate = new Date(today);
-    endDate.setDate(endDate.getDate() + 30);
-    const endStr = format(endDate, "yyyy-MM-dd");
+  // Load real bookings dynamically based on selectedDate
+  useEffect(() => {
+    const start = new Date(selectedDate);
+    start.setDate(start.getDate() - 7); // Load from 7 days before selectedDate
+    const end = new Date(selectedDate);
+    end.setDate(end.getDate() + 37);    // to 37 days after selectedDate (covers week view & future)
+
+    const startStr = format(start, "yyyy-MM-dd");
+    const endStr = format(end, "yyyy-MM-dd");
 
     getBookingsForDateRange(startStr, endStr)
       .then((serverBookings) => {
@@ -111,21 +115,35 @@ export default function BookingFlow() {
           (b) => b.id.startsWith("booking-") || b.id.startsWith("admin-")
         );
 
-        // Combine server bookings with unsynced local bookings (Smart Merge)
-        const mergedBookings = [...serverBookings];
-        unsyncedBookings.forEach((localB) => {
-          if (!mergedBookings.some((b) => b.id === localB.id)) {
-            mergedBookings.push(localB);
-          }
+        setAllBookings((prevBookings) => {
+          const bookingsMap = new Map<string, Booking>();
+          
+          // 1. Keep previous bookings that are OUTSIDE the currently queried range
+          const queryStart = start.getTime();
+          const queryEnd = end.getTime();
+          
+          prevBookings.forEach((b) => {
+            const bTime = new Date(b.start_time).getTime();
+            if (bTime < queryStart || bTime > queryEnd) {
+              bookingsMap.set(b.id, b);
+            }
+          });
+          
+          // 2. Add all newly loaded server bookings (inside the range)
+          serverBookings.forEach((b) => bookingsMap.set(b.id, b));
+          
+          // 3. Add unsynced local bookings
+          unsyncedBookings.forEach((b) => bookingsMap.set(b.id, b));
+          
+          const merged = Array.from(bookingsMap.values());
+          saveBookings(merged);
+          return merged;
         });
-
-        setAllBookings(mergedBookings);
-        saveBookings(mergedBookings);
       })
       .catch(() => {
         // Supabase not available — keep using stored bookings
       });
-  }, []);
+  }, [selectedDate]);
 
   // Listen for booking changes to keep state up-to-date
   useEffect(() => {
