@@ -50,6 +50,7 @@ import {
   RACKET_RENTAL_PRICE,
   groupTrainingsToVirtualBookings,
   setCourtIds,
+  sofiaToUTC,
 } from "@/lib/booking-utils";
 import { mockBookings, mockCourts } from "@/lib/mock-data";
 import { getStoredGroupTrainings } from "@/lib/group-training-storage";
@@ -296,18 +297,20 @@ export default function BookingFlow() {
 
     // Helper: build a local Booking object for immediate UI update
     const buildLocalBooking = (serverId?: string): Booking => {
-      const startTime = new Date(selectedDate);
-      startTime.setHours(hours, 0, 0, 0);
-      const endTime = new Date(startTime);
-      endTime.setHours(endTime.getHours() + effectiveDuration);
+      const dateStr = format(selectedDate, "yyyy-MM-dd");
+      const startStr = `${String(hours).padStart(2, "0")}:00`;
+      const endStr = `${String(hours + effectiveDuration).padStart(2, "0")}:00`;
+
+      const start_time = sofiaToUTC(dateStr, startStr);
+      const end_time = sofiaToUTC(dateStr, endStr);
 
       return {
         id: serverId || `booking-${Date.now()}`,
         user_id: "guest",
         court_id: assignedCourt,
         coach_id: bookingType === "coaching_session" ? null : null,
-        start_time: startTime.toISOString(),
-        end_time: endTime.toISOString(),
+        start_time,
+        end_time,
         booking_type: bookingType,
         status: "confirmed",
         total_price: totalPrice,

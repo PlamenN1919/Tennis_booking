@@ -137,8 +137,8 @@ export function isSlotAvailable(
     if (booking.court_id !== courtId) return false;
     if (booking.status === "cancelled") return false;
 
-    const bookingStart = new Date(booking.start_time);
-    const bookingEnd = new Date(booking.end_time);
+    const bookingStart = utcToSofiaDate(booking.start_time);
+    const bookingEnd = utcToSofiaDate(booking.end_time);
 
     // Overlap detection: (ExistingStart < NewEnd) AND (ExistingEnd > NewStart)
     return isBefore(bookingStart, slotEnd) && isAfter(bookingEnd, slotStart);
@@ -274,15 +274,20 @@ export function groupTrainingsToVirtualBookings(
     const [startH] = t.start_time.split(":").map(Number);
     const [endH] = t.end_time.split(":").map(Number);
 
-    const startTime = new Date(y, mo - 1, da, startH, 0, 0, 0);
-    const endTime = new Date(y, mo - 1, da, endH, 0, 0, 0);
+    const startStr = `${String(startH).padStart(2, "0")}:00`;
+    const endStr = `${String(endH).padStart(2, "0")}:00`;
+    const startTimeISO = sofiaToUTC(t.date, startStr);
+    const endTimeISO = sofiaToUTC(t.date, endStr);
+
+    const startTime = utcToSofiaDate(startTimeISO);
+    const endTime = utcToSofiaDate(endTimeISO);
 
     // Check Court A availability against real bookings + already-assigned virtual ones
     const allSoFar = [...existingBookings, ...virtualBookings];
     const courtABusy = allSoFar.some((b) => {
       if (b.court_id !== COURT_A_ID || b.status === "cancelled") return false;
-      const bStart = new Date(b.start_time);
-      const bEnd = new Date(b.end_time);
+      const bStart = utcToSofiaDate(b.start_time);
+      const bEnd = utcToSofiaDate(b.end_time);
       return isBefore(bStart, endTime) && isAfter(bEnd, startTime);
     });
 
@@ -293,8 +298,8 @@ export function groupTrainingsToVirtualBookings(
       user_id: "group-training",
       court_id: courtId,
       coach_id: null,
-      start_time: startTime.toISOString(),
-      end_time: endTime.toISOString(),
+      start_time: startTimeISO,
+      end_time: endTimeISO,
       booking_type: "coaching_session" as const,
       status: "confirmed" as const,
       total_price: 0,
@@ -304,4 +309,72 @@ export function groupTrainingsToVirtualBookings(
   }
 
   return virtualBookings;
+}
+
+/**
+ * Convert a local Sofia date and time string to a UTC ISO string.
+ * Accounts for DST transitions in Europe/Sofia.
+ */
+export function sofiaToUTC(dateStr: string, timeStr: string): string {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const [hours, minutes] = timeStr.split(":").map(Number);
+
+  // Initial guess assuming standard EET (UTC+2)
+  let utcMs = Date.UTC(year, month - 1, day, hours - 2, minutes);
+
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Sofia",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+
+  for (let i = 0; i < 3; i++) {
+    const parts = formatter.formatToParts(new Date(utcMs));
+    const partMap: Record<string, string> = {};
+    parts.forEach((p) => (partMap[p.type] = p.value));
+
+    const currentSofiaDate = new Date(
+      `${partMap.year}-${partMap.month}-${partMap.day}T${partMap.hour}:${partMap.minute}:00Z`
+    );
+    const targetSofiaDate = new Date(`${dateStr}T${timeStr}:00Z`);
+
+    const diffMs = targetSofiaDate.getTime() - currentSofiaDate.getTime();
+    if (diffMs === 0) break;
+    utcMs += diffMs;
+  }
+
+  return new Date(utcMs).toISOString();
+}
+
+/**
+ * Convert a UTC ISO string to a Date object representing Sofia's local components in the browser/server environment.
+ */
+export function utcToSofiaDate(utcString: string): Date {
+  const date = new Date(utcString);
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Sofia",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(date);
+  const partMap: Record<string, string> = {};
+  parts.forEach((p) => (partMap[p.type] = p.value));
+  return new Date(
+    parseInt(partMap.year, 10),
+    parseInt(partMap.month, 10) - 1,
+    parseInt(partMap.day, 10),
+    parseInt(partMap.hour, 10),
+    parseInt(partMap.minute, 10),
+    parseInt(partMap.second, 10)
+  );
 }

@@ -5,6 +5,7 @@ import { bookingSubmitSchema } from "@/lib/validations";
 import { revalidatePath } from "next/cache";
 import { v4 as uuidv4 } from "uuid";
 import { format } from "date-fns";
+import { sofiaToUTC } from "@/lib/booking-utils";
 
 // ============================================
 // Booking Actions
@@ -88,11 +89,7 @@ export async function createBooking(formData: {
     return { error: "Резервацията надвишава работното време (до 24:00)." };
   }
 
-  // Build time values — parse date components explicitly to avoid timezone shifts
-  // (new Date("YYYY-MM-DD") parses as UTC midnight, which can shift the date in local TZ)
   const [year, month, day] = data.date.split("-").map(Number);
-  const baseStartTime = new Date(year, month - 1, day, hours, 0, 0, 0);
-  const baseEndTime = new Date(year, month - 1, day, hours + data.durationHours, 0, 0, 0);
 
   // Calculate weeks to book
   const weeksToBook = data.isRecurring ? data.recurringWeeks || 4 : 1;
@@ -102,10 +99,22 @@ export async function createBooking(formData: {
 
   // Check availability for ALL dates in the series before creating anything
   for (let week = 0; week < weeksToBook; week++) {
-    const weekStartTime = new Date(baseStartTime);
-    weekStartTime.setDate(weekStartTime.getDate() + week * 7);
-    const weekEndTime = new Date(baseEndTime);
-    weekEndTime.setDate(weekEndTime.getDate() + week * 7);
+    const currentWeekDate = new Date(year, month - 1, day);
+    currentWeekDate.setDate(currentWeekDate.getDate() + week * 7);
+    
+    const yStr = currentWeekDate.getFullYear();
+    const mStr = String(currentWeekDate.getMonth() + 1).padStart(2, "0");
+    const dStr = String(currentWeekDate.getDate()).padStart(2, "0");
+    const currentWeekDateStr = `${yStr}-${mStr}-${dStr}`;
+
+    const startStr = `${String(hours).padStart(2, "0")}:00`;
+    const endStr = `${String(hours + data.durationHours).padStart(2, "0")}:00`;
+    
+    const weekStartTimeISO = sofiaToUTC(currentWeekDateStr, startStr);
+    const weekEndTimeISO = sofiaToUTC(currentWeekDateStr, endStr);
+
+    const weekStartTime = new Date(weekStartTimeISO);
+    const weekEndTime = new Date(weekEndTimeISO);
 
     // Check coach availability
     if (data.bookingType === "coaching_session" && data.coachId) {
@@ -115,11 +124,11 @@ export async function createBooking(formData: {
         .select("id")
         .eq("coach_id", data.coachId)
         .eq("status", "confirmed")
-        .lt("start_time", weekEndTime.toISOString())
-        .gt("end_time", weekStartTime.toISOString());
+        .lt("start_time", weekEndTimeISO)
+        .gt("end_time", weekStartTimeISO);
 
       if (conflictingCoach && conflictingCoach.length > 0) {
-        const formattedDate = weekStartTime.toLocaleDateString('bg-BG');
+        const formattedDate = weekStartTime.toLocaleDateString('bg-BG', { timeZone: 'Europe/Sofia' });
         return { error: `Треньорът е вече зает на ${formattedDate}. Моля, изберете друг час за поредицата.` };
       }
 
@@ -128,11 +137,11 @@ export async function createBooking(formData: {
         .from("coach_unavailability")
         .select("id")
         .eq("coach_id", data.coachId)
-        .lt("start_time", weekEndTime.toISOString())
-        .gt("end_time", weekStartTime.toISOString());
+        .lt("start_time", weekEndTimeISO)
+        .gt("end_time", weekStartTimeISO);
 
       if (unavailableCoach && unavailableCoach.length > 0) {
-        const formattedDate = weekStartTime.toLocaleDateString('bg-BG');
+        const formattedDate = weekStartTime.toLocaleDateString('bg-BG', { timeZone: 'Europe/Sofia' });
         return { error: `Треньорът не е на разположение на ${formattedDate} (маркиран почивен час).` };
       }
     }
@@ -143,16 +152,15 @@ export async function createBooking(formData: {
       .select("id")
       .eq("court_id", data.courtId)
       .eq("status", "confirmed")
-      .lt("start_time", weekEndTime.toISOString())
-      .gt("end_time", weekStartTime.toISOString());
+      .lt("start_time", weekEndTimeISO)
+      .gt("end_time", weekStartTimeISO);
 
     if (conflictingCourt && conflictingCourt.length > 0) {
-      const formattedDate = weekStartTime.toLocaleDateString('bg-BG');
+      const formattedDate = weekStartTime.toLocaleDateString('bg-BG', { timeZone: 'Europe/Sofia' });
       return { error: `Кортът е вече зает на ${formattedDate}. Моля, изберете друг час за поредицата.` };
     }
 
     // Check group training conflicts on the same court (Bug #1: query current week's date)
-    const currentWeekDateStr = format(weekStartTime, "yyyy-MM-dd");
     const { data: activeGTs } = await supabase
       .from("group_trainings")
       .select("*")
@@ -170,19 +178,19 @@ export async function createBooking(formData: {
             .from("bookings")
             .select("court_id")
             .eq("status", "confirmed")
-            .lt("start_time", weekEndTime.toISOString())
-            .gt("end_time", weekStartTime.toISOString());
+            .lt("start_time", weekEndTimeISO)
+            .gt("end_time", weekStartTimeISO);
 
           const bookedCourtIds = new Set((occupiedBookings || []).map(b => b.court_id));
           // Group training occupies one court; if the requested court is also booked, reject
           if (bookedCourtIds.size >= 1 && bookedCourtIds.has(data.courtId)) {
-            const formattedDate = weekStartTime.toLocaleDateString('bg-BG');
+            const formattedDate = weekStartTime.toLocaleDateString('bg-BG', { timeZone: 'Europe/Sofia' });
             return { error: `Кортът е зает (групова тренировка + резервация) на ${formattedDate}.` };
           }
           // If there's a booking on the OTHER court and the GT needs this court, also reject
           if (bookedCourtIds.size >= 1 && !bookedCourtIds.has(data.courtId)) {
             // The other court is booked, so GT takes the requested court — conflict
-            const formattedDate = weekStartTime.toLocaleDateString('bg-BG');
+            const formattedDate = weekStartTime.toLocaleDateString('bg-BG', { timeZone: 'Europe/Sofia' });
             return { error: `Кортът е зает от групова тренировка на ${formattedDate}.` };
           }
         }
@@ -427,11 +435,19 @@ export async function getBookingsForDateRange(startDate: string, endDate: string
 
   const supabase = await createServerSupabaseClient();
 
+  const [ey, em, ed] = endDate.split("-").map(Number);
+  const endLocal = new Date(ey, em - 1, ed);
+  endLocal.setDate(endLocal.getDate() + 1);
+  const nextDayStr = `${endLocal.getFullYear()}-${String(endLocal.getMonth() + 1).padStart(2,'0')}-${String(endLocal.getDate()).padStart(2,'0')}`;
+
+  const startUTC = sofiaToUTC(startDate, "00:00");
+  const endUTC = sofiaToUTC(nextDayStr, "00:00");
+
   const { data, error } = await supabase
     .from("bookings")
     .select("*, court:courts(*), coach:coaches(*)")
-    .gte("start_time", `${startDate}T00:00:00+00:00`)
-    .lte("start_time", `${endDate}T23:59:59+00:00`)
+    .gte("start_time", startUTC)
+    .lt("start_time", endUTC)
     .neq("status", "cancelled");
 
   if (error) {
@@ -445,17 +461,22 @@ export async function getBookingsForDateRange(startDate: string, endDate: string
 export async function getBookingsForWeek(weekStart: string) {
   const supabase = await createServerSupabaseClient();
 
-  // Parse date components explicitly to avoid timezone shifts
   const [wy, wm, wd] = weekStart.split("-").map(Number);
-  const startDate = new Date(wy, wm - 1, wd, 0, 0, 0, 0);
-  const endDate = new Date(startDate);
-  endDate.setDate(endDate.getDate() + 7);
+  const startLocal = new Date(wy, wm - 1, wd);
+  
+  const endLocal = new Date(startLocal);
+  endLocal.setDate(endLocal.getDate() + 7);
+  
+  const nextMondayStr = `${endLocal.getFullYear()}-${String(endLocal.getMonth() + 1).padStart(2,'0')}-${String(endLocal.getDate()).padStart(2,'0')}`;
+  
+  const startUTC = sofiaToUTC(weekStart, "00:00");
+  const endUTC = sofiaToUTC(nextMondayStr, "00:00");
 
   const { data, error } = await supabase
     .from("bookings")
     .select("*, court:courts(*), coach:coaches(*)")
-    .gte("start_time", startDate.toISOString())
-    .lt("start_time", endDate.toISOString())
+    .gte("start_time", startUTC)
+    .lt("start_time", endUTC)
     .neq("status", "cancelled");
 
   if (error) {
@@ -627,19 +648,64 @@ export async function getAdminStats() {
   const allBookings = bookings || [];
 
   const now = new Date();
+  
+  // Helpers for admin stats in Europe/Sofia timezone
+  const getSofiaMonthAndYear = (d: Date) => {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Europe/Sofia',
+      year: 'numeric',
+      month: 'numeric'
+    });
+    const parts = formatter.formatToParts(d);
+    const partMap: Record<string, string> = {};
+    parts.forEach(p => partMap[p.type] = p.value);
+    return {
+      month: parseInt(partMap.month, 10) - 1,
+      year: parseInt(partMap.year, 10)
+    };
+  };
+
+  const getSofiaDateString = (d: Date) => {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Europe/Sofia',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const parts = formatter.formatToParts(d);
+    const partMap: Record<string, string> = {};
+    parts.forEach(p => partMap[p.type] = p.value);
+    return `${partMap.year}-${partMap.month}-${partMap.day}`;
+  };
+
+  const getSofiaHour = (d: Date) => {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Europe/Sofia',
+      hour: '2-digit',
+      hour12: false
+    });
+    return parseInt(formatter.format(d), 10);
+  };
+
+  const nowSofia = getSofiaMonthAndYear(now);
+
   const thisMonth = allBookings.filter((b) => {
     const d = new Date(b.start_time);
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    const dSofia = getSofiaMonthAndYear(d);
+    return dSofia.month === nowSofia.month && dSofia.year === nowSofia.year;
   });
+
+  let lastMonthSofiaMonth = nowSofia.month - 1;
+  let lastMonthSofiaYear = nowSofia.year;
+  if (lastMonthSofiaMonth < 0) {
+    lastMonthSofiaMonth = 11;
+    lastMonthSofiaYear -= 1;
+  }
 
   const lastMonth = allBookings.filter((b) => {
     const d = new Date(b.start_time);
-    const lastMonthDate = new Date(now);
-    lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
-    return (
-      d.getMonth() === lastMonthDate.getMonth() &&
-      d.getFullYear() === lastMonthDate.getFullYear()
-    );
+    const dSofia = getSofiaMonthAndYear(d);
+    return dSofia.month === lastMonthSofiaMonth && dSofia.year === lastMonthSofiaYear;
   });
 
   const thisMonthRevenue = thisMonth.reduce((s, b) => s + b.total_price, 0);
@@ -654,25 +720,30 @@ export async function getAdminStats() {
   const hourlyDistribution: Record<number, number> = {};
   for (let h = 8; h < 24; h++) hourlyDistribution[h] = 0;
   allBookings.forEach((b) => {
-    const hour = new Date(b.start_time).getHours();
+    const hour = getSofiaHour(new Date(b.start_time));
     if (hourlyDistribution[hour] !== undefined) {
       hourlyDistribution[hour]++;
     }
   });
 
   // Daily distribution (for this week)
-  // Fix: on Sunday (getDay()===0), go back to previous Monday
-  const weekStart = new Date(now);
+  const nowSofiaDateStr = getSofiaDateString(now);
+  const [ny, nm, nd] = nowSofiaDateStr.split('-').map(Number);
+  const weekStart = new Date(ny, nm - 1, nd);
   const dayOfWeek = weekStart.getDay();
   const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
   weekStart.setDate(weekStart.getDate() + mondayOffset);
+  
   const dailyDistribution: Record<string, number> = {};
   for (let i = 0; i < 7; i++) {
     const d = new Date(weekStart);
     d.setDate(d.getDate() + i);
-    const key = d.toISOString().split("T")[0];
+    const yStr = d.getFullYear();
+    const mStr = String(d.getMonth() + 1).padStart(2, "0");
+    const dStr = String(d.getDate()).padStart(2, "0");
+    const key = `${yStr}-${mStr}-${dStr}`;
     dailyDistribution[key] = allBookings.filter((b) => {
-      const bd = new Date(b.start_time).toISOString().split("T")[0];
+      const bd = getSofiaDateString(new Date(b.start_time));
       return bd === key;
     }).length;
   }
@@ -703,7 +774,14 @@ async function calculatePrice(
   coachingTypeSelected: string | null
 ): Promise<number> {
   const { calculateLocalPrice } = await import("@/lib/booking-utils");
-  const time = `${String(startTime.getHours()).padStart(2, "0")}:${String(startTime.getMinutes()).padStart(2, "0")}`;
+  
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Europe/Sofia',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+  const time = formatter.format(startTime);
 
   return calculateLocalPrice(
     time,
