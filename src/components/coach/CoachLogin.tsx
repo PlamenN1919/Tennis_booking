@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { loginCoachByPin } from "@/lib/actions";
 
 interface CoachLoginProps {
-  onLogin: (coach: { id: string; name: string }) => void;
+  onLogin: (coach: { id: string; name: string; pin: string }) => void;
 }
 
 export default function CoachLogin({ onLogin }: CoachLoginProps) {
@@ -27,9 +27,11 @@ export default function CoachLogin({ onLogin }: CoachLoginProps) {
     if (res.error) {
       setError(res.error);
     } else if (res.coach) {
-      // Store in localStorage for persistence
-      localStorage.setItem("coach_session", JSON.stringify(res.coach));
-      onLogin(res.coach);
+      // Keep the PIN in the session — server actions (block/unblock hours)
+      // re-verify it, since coaches don't have a Supabase auth session.
+      const session = { id: res.coach.id, name: res.coach.name, pin };
+      localStorage.setItem("coach_session", JSON.stringify(session));
+      onLogin(session);
     }
     setLoading(false);
   };

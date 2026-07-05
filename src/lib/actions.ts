@@ -1,11 +1,32 @@
 "use server";
 
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import {
+  createServerSupabaseClient,
+  isSupabaseConfigured,
+  isServerUserAdmin,
+} from "@/lib/supabase-server";
 import { bookingSubmitSchema } from "@/lib/validations";
 import { revalidatePath } from "next/cache";
 import { v4 as uuidv4 } from "uuid";
-import { format } from "date-fns";
 import { sofiaToUTC } from "@/lib/booking-utils";
+
+// ============================================
+// Authorization helper
+// ============================================
+
+/**
+ * Gate for admin-only actions. In local mock mode (no Supabase) everything is
+ * allowed — there is no auth infrastructure to check against.
+ */
+async function requireAdmin(): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!isSupabaseConfigured()) {
+    return { ok: true };
+  }
+  if (await isServerUserAdmin()) {
+    return { ok: true };
+  }
+  return { ok: false, error: "Изисква се вход като администратор." };
+}
 
 // ============================================
 // Booking Actions
@@ -28,10 +49,12 @@ export async function createBooking(formData: {
   wantsBasket?: boolean;
   wantsRacket?: boolean;
 }) {
-  // Check if Supabase is configured
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!supabaseUrl || supabaseUrl === "https://your-project.supabase.co" || supabaseUrl === "https://placeholder.supabase.co") {
-    throw new Error("Supabase not configured — using local mock");
+  // Check if Supabase is configured.
+  // Return a marker instead of throwing: thrown server-action errors get
+  // masked in production builds, so clients can't reliably detect this case
+  // from the error message.
+  if (!isSupabaseConfigured()) {
+    return { localMode: true as const };
   }
 
   const supabase = await createServerSupabaseClient();
@@ -51,35 +74,42 @@ export async function createBooking(formData: {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const userId = user?.id || null;
+  let userId = user?.id || null;
 
   // Check booking limits for authenticated users
   if (userId) {
     const { data: profile } = await supabase
       .from("users")
-      .select("max_daily_bookings")
+      .select("max_daily_bookings, role")
       .eq("id", userId)
       .single();
 
-    const maxDaily = profile?.max_daily_bookings || 3;
+    if (profile?.role === "admin") {
+      // Admins create bookings on behalf of customers — store them as guest
+      // bookings (customer identified by name/phone) and skip the personal
+      // daily limit, which would otherwise cap the admin at 3 bookings/day.
+      userId = null;
+    } else {
+      const maxDaily = profile?.max_daily_bookings || 3;
 
-    // Fetch confirmed bookings for this user to check daily limit locally using Sofia timezone
-    const { data: userBookings } = await supabase
-      .from("bookings")
-      .select("start_time")
-      .eq("user_id", userId)
-      .eq("status", "confirmed");
+      // Fetch confirmed bookings for this user to check daily limit locally using Sofia timezone
+      const { data: userBookings } = await supabase
+        .from("bookings")
+        .select("start_time")
+        .eq("user_id", userId)
+        .eq("status", "confirmed");
 
-    const bookingsOnDay = (userBookings || []).filter((b) => {
-      const d = new Date(b.start_time);
-      const sofiaDateStr = d.toLocaleDateString("en-CA", { timeZone: "Europe/Sofia" });
-      return sofiaDateStr === data.date;
-    });
+      const bookingsOnDay = (userBookings || []).filter((b) => {
+        const d = new Date(b.start_time);
+        const sofiaDateStr = d.toLocaleDateString("en-CA", { timeZone: "Europe/Sofia" });
+        return sofiaDateStr === data.date;
+      });
 
-    if (bookingsOnDay.length >= maxDaily) {
-      return {
-        error: `Достигнахте лимита от ${maxDaily} резервации на ден.`,
-      };
+      if (bookingsOnDay.length >= maxDaily) {
+        return {
+          error: `Достигнахте лимита от ${maxDaily} резервации на ден.`,
+        };
+      }
     }
   }
 
@@ -90,6 +120,19 @@ export async function createBooking(formData: {
   }
 
   const [year, month, day] = data.date.split("-").map(Number);
+
+  // Court IDs sorted by name (Корт A, Корт B) — needed to mirror the
+  // client-side group-training court auto-assignment (GT takes Court A if
+  // free at that time, otherwise Court B).
+  const { data: courtRows, error: courtsErr } = await supabase
+    .from("courts")
+    .select("id, name")
+    .order("name");
+  if (courtsErr) {
+    console.error("Court lookup error:", courtsErr);
+    return { error: "Грешка при връзка с базата данни. Моля, опитайте отново." };
+  }
+  const sortedCourtIds = (courtRows || []).map((c) => c.id);
 
   // Calculate weeks to book
   const weeksToBook = data.isRecurring ? data.recurringWeeks || 4 : 1;
@@ -119,7 +162,7 @@ export async function createBooking(formData: {
     // Check coach availability
     if (data.bookingType === "coaching_session" && data.coachId) {
       // 1. Check other conflicting bookings
-      const { data: conflictingCoach } = await supabase
+      const { data: conflictingCoach, error: coachConflictErr } = await supabase
         .from("bookings")
         .select("id")
         .eq("coach_id", data.coachId)
@@ -127,18 +170,28 @@ export async function createBooking(formData: {
         .lt("start_time", weekEndTimeISO)
         .gt("end_time", weekStartTimeISO);
 
+      if (coachConflictErr) {
+        console.error("Coach conflict check error:", coachConflictErr);
+        return { error: "Грешка при проверка на наличността на треньора. Моля, опитайте отново." };
+      }
+
       if (conflictingCoach && conflictingCoach.length > 0) {
         const formattedDate = weekStartTime.toLocaleDateString('bg-BG', { timeZone: 'Europe/Sofia' });
         return { error: `Треньорът е вече зает на ${formattedDate}. Моля, изберете друг час за поредицата.` };
       }
 
       // 2. Check coach unavailability blocks (Bug #2)
-      const { data: unavailableCoach } = await supabase
+      const { data: unavailableCoach, error: unavailErr } = await supabase
         .from("coach_unavailability")
         .select("id")
         .eq("coach_id", data.coachId)
         .lt("start_time", weekEndTimeISO)
         .gt("end_time", weekStartTimeISO);
+
+      if (unavailErr) {
+        console.error("Coach unavailability check error:", unavailErr);
+        return { error: "Грешка при проверка на наличността на треньора. Моля, опитайте отново." };
+      }
 
       if (unavailableCoach && unavailableCoach.length > 0) {
         const formattedDate = weekStartTime.toLocaleDateString('bg-BG', { timeZone: 'Europe/Sofia' });
@@ -147,7 +200,7 @@ export async function createBooking(formData: {
     }
 
     // Check court availability
-    const { data: conflictingCourt } = await supabase
+    const { data: conflictingCourt, error: courtConflictErr } = await supabase
       .from("bookings")
       .select("id")
       .eq("court_id", data.courtId)
@@ -155,44 +208,62 @@ export async function createBooking(formData: {
       .lt("start_time", weekEndTimeISO)
       .gt("end_time", weekStartTimeISO);
 
+    if (courtConflictErr) {
+      console.error("Court conflict check error:", courtConflictErr);
+      return { error: "Грешка при проверка на заетостта на корта. Моля, опитайте отново." };
+    }
+
     if (conflictingCourt && conflictingCourt.length > 0) {
       const formattedDate = weekStartTime.toLocaleDateString('bg-BG', { timeZone: 'Europe/Sofia' });
       return { error: `Кортът е вече зает на ${formattedDate}. Моля, изберете друг час за поредицата.` };
     }
 
-    // Check group training conflicts on the same court (Bug #1: query current week's date)
-    const { data: activeGTs } = await supabase
+    // Check group training conflicts. A group training occupies exactly one
+    // court: Court A if it is free during the training window, otherwise
+    // Court B (same auto-assignment as the client-side calendar).
+    const { data: activeGTs, error: gtErr } = await supabase
       .from("group_trainings")
       .select("*")
       .eq("date", currentWeekDateStr)
-      .eq("is_active", true);
+      .eq("is_active", true)
+      .order("start_time");
 
-    if (activeGTs && activeGTs.length > 0) {
+    if (gtErr) {
+      console.error("Group training check error:", gtErr);
+      return { error: "Грешка при проверка на груповите тренировки. Моля, опитайте отново." };
+    }
+
+    if (activeGTs && activeGTs.length > 0 && sortedCourtIds.length > 0) {
+      const assignedGtCourts = new Set<string>();
       for (const gt of activeGTs) {
-        const gtStartH = parseInt(gt.start_time.split(":")[0]);
-        const gtEndH = parseInt(gt.end_time.split(":")[0]);
-        // Check if the booking time overlaps with the group training
-        if (hours < gtEndH && hours + data.durationHours > gtStartH) {
-          // Count how many courts are booked by regular bookings at this time
-          const { data: occupiedBookings } = await supabase
-            .from("bookings")
-            .select("court_id")
-            .eq("status", "confirmed")
-            .lt("start_time", weekEndTimeISO)
-            .gt("end_time", weekStartTimeISO);
+        const gtStartH = parseInt(gt.start_time.split(":")[0], 10);
+        const gtEndH = parseInt(gt.end_time.split(":")[0], 10);
+        const gtStartISO = sofiaToUTC(currentWeekDateStr, `${String(gtStartH).padStart(2, "0")}:00`);
+        const gtEndISO = sofiaToUTC(currentWeekDateStr, `${String(gtEndH).padStart(2, "0")}:00`);
 
-          const bookedCourtIds = new Set((occupiedBookings || []).map(b => b.court_id));
-          // Group training occupies one court; if the requested court is also booked, reject
-          if (bookedCourtIds.size >= 1 && bookedCourtIds.has(data.courtId)) {
-            const formattedDate = weekStartTime.toLocaleDateString('bg-BG', { timeZone: 'Europe/Sofia' });
-            return { error: `Кортът е зает (групова тренировка + резервация) на ${formattedDate}.` };
-          }
-          // If there's a booking on the OTHER court and the GT needs this court, also reject
-          if (bookedCourtIds.size >= 1 && !bookedCourtIds.has(data.courtId)) {
-            // The other court is booked, so GT takes the requested court — conflict
-            const formattedDate = weekStartTime.toLocaleDateString('bg-BG', { timeZone: 'Europe/Sofia' });
-            return { error: `Кортът е зает от групова тренировка на ${formattedDate}.` };
-          }
+        // Which courts are occupied by regular bookings during the GT window?
+        const { data: gtWindowBookings, error: gtWinErr } = await supabase
+          .from("bookings")
+          .select("court_id")
+          .eq("status", "confirmed")
+          .lt("start_time", gtEndISO)
+          .gt("end_time", gtStartISO);
+
+        if (gtWinErr) {
+          console.error("Group training window check error:", gtWinErr);
+          return { error: "Грешка при проверка на заетостта на кортовете. Моля, опитайте отново." };
+        }
+
+        const busyCourtIds = new Set((gtWindowBookings || []).map((b) => b.court_id));
+        const gtCourt =
+          sortedCourtIds.find((id) => !busyCourtIds.has(id) && !assignedGtCourts.has(id)) ??
+          sortedCourtIds[sortedCourtIds.length - 1];
+        assignedGtCourts.add(gtCourt);
+
+        const overlapsRequestedSlot = hours < gtEndH && hours + data.durationHours > gtStartH;
+        if (overlapsRequestedSlot && gtCourt === data.courtId) {
+          const formattedDate = weekStartTime.toLocaleDateString('bg-BG', { timeZone: 'Europe/Sofia' });
+          return { error: `Кортът е зает от групова тренировка на ${formattedDate}. Моля, изберете друг корт или час.` };
         }
       }
     }
@@ -283,6 +354,9 @@ export async function createBooking(formData: {
   return {
     success: true,
     booking: created?.[0],
+    // All rows created in this call (recurring bookings create one per week);
+    // clients should use these instead of fabricating local copies.
+    bookings: created || [],
     totalBookings: bookings.length,
   };
 }
@@ -317,10 +391,9 @@ export async function cancelBooking(bookingId: string) {
       return { error: "Нямате право да отмените тази резервация." };
     }
   } else {
-    // Guest cancellation: only allowed if the booking has no user_id (anonymous/guest booking)
-    if (booking.user_id !== null) {
-      return { error: "Трябва да сте влезли в акаунта си, за да отмените тази резервация." };
-    }
+    // Cancellation requires an authenticated user (admin or booking owner).
+    // RLS blocks anonymous updates anyway — fail early with a clear message.
+    return { error: "Трябва да сте влезли в акаунта си, за да отмените резервация." };
   }
 
   // Check if booking is in the past
@@ -328,13 +401,20 @@ export async function cancelBooking(bookingId: string) {
     return { error: "Не можете да отмените минала резервация." };
   }
 
-  const { error } = await supabase
+  const { data: updatedRows, error } = await supabase
     .from("bookings")
     .update({ status: "cancelled" })
-    .eq("id", bookingId);
+    .eq("id", bookingId)
+    .select("id");
 
   if (error) {
     return { error: "Грешка при отмяна на резервацията." };
+  }
+
+  // RLS can silently block the update (0 rows affected) — treat as failure,
+  // otherwise the UI shows "cancelled" while the DB still says "confirmed".
+  if (!updatedRows || updatedRows.length === 0) {
+    return { error: "Резервацията не беше отменена — нямате права за тази операция." };
   }
 
   revalidatePath("/booking");
@@ -375,27 +455,29 @@ export async function cancelRecurringBookings(recurringGroupId: string) {
       return { error: "Повтарящата се резервация не е намерена." };
     }
 
-    if (user) {
-      if (groupBookings[0].user_id !== user.id) {
-        return { error: "Нямате право да отмените тази поредица резервации." };
-      }
-    } else {
-      // Guest: only allow if it is an anonymous recurring group
-      if (groupBookings[0].user_id !== null) {
-        return { error: "Трябва да сте влезли в акаунта си, за да отмените тази поредица." };
-      }
+    if (!user) {
+      // Cancellation requires an authenticated user (admin or booking owner)
+      return { error: "Трябва да сте влезли в акаунта си, за да отмените тази поредица." };
+    }
+    if (groupBookings[0].user_id !== user.id) {
+      return { error: "Нямате право да отмените тази поредица резервации." };
     }
   }
 
-  const { error } = await supabase
+  const { data: updatedRows, error } = await supabase
     .from("bookings")
     .update({ status: "cancelled" })
     .eq("recurring_group_id", recurringGroupId)
     .eq("status", "confirmed")
-    .gt("start_time", new Date().toISOString());
+    .gt("start_time", new Date().toISOString())
+    .select("id");
 
   if (error) {
     return { error: "Грешка при отмяна на повтарящите се резервации." };
+  }
+
+  if (!updatedRows || updatedRows.length === 0) {
+    return { error: "Няма отменени резервации — или нямате права, или всички часове от поредицата са минали." };
   }
 
   revalidatePath("/booking");
@@ -427,8 +509,7 @@ export async function getBookingsForDate(date: string) {
  * Used by client components to load real data from the database.
  */
 export async function getBookingsForDateRange(startDate: string, endDate: string) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!supabaseUrl || supabaseUrl === "https://your-project.supabase.co" || supabaseUrl === "https://placeholder.supabase.co") {
+  if (!isSupabaseConfigured()) {
     // Supabase not configured — return empty to let caller use mock data
     return [];
   }
@@ -536,8 +617,7 @@ export async function getUserCoachInfo() {
 }
 
 export async function loginCoachByPin(pin: string) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!supabaseUrl || supabaseUrl === "https://your-project.supabase.co" || supabaseUrl === "https://placeholder.supabase.co") {
+  if (!isSupabaseConfigured()) {
     return { error: "Supabase не е конфигуриран." };
   }
 
@@ -561,9 +641,13 @@ export async function createCoach(formData: {
   hourlyRate?: number;
   pin: string;
 }) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!supabaseUrl || supabaseUrl === "https://your-project.supabase.co" || supabaseUrl === "https://placeholder.supabase.co") {
+  if (!isSupabaseConfigured()) {
     return { error: "Supabase не е конфигуриран." };
+  }
+
+  const admin = await requireAdmin();
+  if (!admin.ok) {
+    return { error: admin.error };
   }
 
   const supabase = await createServerSupabaseClient();
@@ -598,27 +682,57 @@ export async function createCoach(formData: {
   return { success: true, coach: data };
 }
 
-export async function getCoaches() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!supabaseUrl || supabaseUrl === "https://your-project.supabase.co" || supabaseUrl === "https://placeholder.supabase.co") {
+export type CoachSummary = {
+  id: string;
+  name: string;
+  specialization: string | null;
+  hourly_rate: number;
+  // Present only when the caller is a logged-in admin
+  pin?: string | null;
+  created_at: string;
+};
+
+export async function getCoaches(): Promise<CoachSummary[]> {
+  if (!isSupabaseConfigured()) {
     return [];
   }
   const supabase = await createServerSupabaseClient();
-  const { data } = await supabase.from("coaches").select("id, name, specialization, hourly_rate, pin, created_at").order("created_at", { ascending: false });
-  return data || [];
+
+  // PIN codes are sensitive — return them only to a logged-in admin.
+  // (The coach portal only needs id/name for its booking form.)
+  const admin = await requireAdmin();
+  const columns = admin.ok
+    ? "id, name, specialization, hourly_rate, pin, created_at"
+    : "id, name, specialization, hourly_rate, created_at";
+
+  const { data } = await supabase
+    .from("coaches")
+    .select(columns)
+    .order("created_at", { ascending: false });
+  return (data as unknown as CoachSummary[]) || [];
 }
 
 export async function deleteCoach(coachId: string) {
+  const admin = await requireAdmin();
+  if (!admin.ok) {
+    return { error: admin.error };
+  }
   const supabase = await createServerSupabaseClient();
-  const { error } = await supabase.from("coaches").delete().eq("id", coachId);
+  const { data: deleted, error } = await supabase
+    .from("coaches")
+    .delete()
+    .eq("id", coachId)
+    .select("id");
   if (error) return { error: "Грешка при изтриване." };
+  if (!deleted || deleted.length === 0) {
+    return { error: "Треньорът не беше изтрит — нямате права за тази операция." };
+  }
   revalidatePath("/admin");
   return { success: true };
 }
 
 export async function getCourts() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!supabaseUrl || supabaseUrl === "https://your-project.supabase.co" || supabaseUrl === "https://placeholder.supabase.co") {
+  if (!isSupabaseConfigured()) {
     // Supabase not configured — return empty to let caller use mock data
     return [];
   }
@@ -866,17 +980,43 @@ async function sendBookingConfirmation(data: {
 // Coach Unavailability
 // ============================================
 
-export async function createCoachBlock(startTime: string, endTime: string, reason?: string) {
+/**
+ * Coaches log in with a PIN (no Supabase auth session), so the PIN is
+ * re-verified here before writing. The old Supabase-auth path is kept as a
+ * fallback for users with role "coach".
+ */
+export async function createCoachBlock(
+  startTime: string,
+  endTime: string,
+  reason?: string,
+  coachAuth?: { coachId: string; pin: string }
+) {
   const supabase = await createServerSupabaseClient();
-  const info = await getUserCoachInfo();
-  if (info.error || !info.coach) {
-    return { error: "Нямате права да блокирате време." };
+
+  let coachId: string | null = null;
+
+  if (coachAuth?.coachId && coachAuth?.pin) {
+    const { data: coach } = await supabase
+      .from("coaches")
+      .select("id")
+      .eq("id", coachAuth.coachId)
+      .eq("pin", coachAuth.pin)
+      .single();
+    if (coach) coachId = coach.id;
+  }
+
+  if (!coachId) {
+    const info = await getUserCoachInfo();
+    if (info.error || !info.coach) {
+      return { error: "Нямате права да блокирате време. Излезте и влезте отново с вашия PIN." };
+    }
+    coachId = info.coach.id;
   }
 
   const { data, error } = await supabase
     .from("coach_unavailability")
     .insert({
-      coach_id: info.coach.id,
+      coach_id: coachId,
       start_time: startTime,
       end_time: endTime,
       reason: reason || null,
@@ -885,6 +1025,7 @@ export async function createCoachBlock(startTime: string, endTime: string, reaso
     .single();
 
   if (error) {
+    console.error("Coach block insert error:", error);
     return { error: "Грешка при блокиране на времето." };
   }
 
@@ -892,17 +1033,35 @@ export async function createCoachBlock(startTime: string, endTime: string, reaso
   return { success: true, block: data };
 }
 
-export async function deleteCoachBlock(blockId: string) {
+export async function deleteCoachBlock(
+  blockId: string,
+  coachAuth?: { coachId: string; pin: string }
+) {
   const supabase = await createServerSupabaseClient();
-  
-  // RLS will ensure they can only delete their own
-  const { error } = await supabase
-    .from("coach_unavailability")
-    .delete()
-    .eq("id", blockId);
+
+  let query = supabase.from("coach_unavailability").delete().eq("id", blockId);
+
+  if (coachAuth?.coachId && coachAuth?.pin) {
+    const { data: coach } = await supabase
+      .from("coaches")
+      .select("id")
+      .eq("id", coachAuth.coachId)
+      .eq("pin", coachAuth.pin)
+      .single();
+    if (!coach) {
+      return { error: "Невалидна треньорска сесия. Излезте и влезте отново с вашия PIN." };
+    }
+    query = query.eq("coach_id", coach.id);
+  }
+
+  const { data: deleted, error } = await query.select("id");
 
   if (error) {
     return { error: "Грешка при изтриване на блокираното време." };
+  }
+
+  if (!deleted || deleted.length === 0) {
+    return { error: "Блокираното време не беше изтрито — нямате права за тази операция." };
   }
 
   revalidatePath("/coach");
@@ -910,8 +1069,7 @@ export async function deleteCoachBlock(blockId: string) {
 }
 
 export async function getCoachBlocks(startDate: string, endDate: string, coachId?: string) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!supabaseUrl || supabaseUrl === "https://your-project.supabase.co" || supabaseUrl === "https://placeholder.supabase.co") {
+  if (!isSupabaseConfigured()) {
     return [];
   }
   const supabase = await createServerSupabaseClient();
@@ -949,7 +1107,14 @@ export async function getGroupTrainings() {
   return data || [];
 }
 
+/**
+ * Full registrations (incl. parent names and phones) — admin only.
+ */
 export async function getGroupRegistrations() {
+  const admin = await requireAdmin();
+  if (!admin.ok) {
+    return [];
+  }
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase
     .from("group_training_registrations")
@@ -962,6 +1127,25 @@ export async function getGroupRegistrations() {
   return data || [];
 }
 
+/**
+ * Slimmed-down registrations for the PUBLIC group-training calendar: only
+ * what is needed to count free spots, no personal data.
+ */
+export async function getGroupRegistrationCounts() {
+  if (!isSupabaseConfigured()) {
+    return [];
+  }
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase
+    .from("group_training_registrations")
+    .select("id, group_training_id, date, status");
+  if (error) {
+    console.error("Error fetching group registration counts:", error);
+    return [];
+  }
+  return data || [];
+}
+
 export async function createGroupTrainingAction(formData: {
   ageGroup: "kids_5_8" | "kids_8_11";
   date: string;
@@ -969,6 +1153,10 @@ export async function createGroupTrainingAction(formData: {
   endTime: string;
   maxParticipants: number;
 }) {
+  const admin = await requireAdmin();
+  if (!admin.ok) {
+    return { error: admin.error };
+  }
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase
     .from("group_trainings")
@@ -991,6 +1179,10 @@ export async function createGroupTrainingAction(formData: {
 }
 
 export async function deleteGroupTrainingAction(id: string) {
+  const admin = await requireAdmin();
+  if (!admin.ok) {
+    return { error: admin.error };
+  }
   const supabase = await createServerSupabaseClient();
   const { error } = await supabase
     .from("group_trainings")
@@ -1006,6 +1198,10 @@ export async function deleteGroupTrainingAction(id: string) {
 }
 
 export async function toggleGroupTrainingAction(id: string, isActive?: boolean) {
+  const admin = await requireAdmin();
+  if (!admin.ok) {
+    return { error: admin.error };
+  }
   const supabase = await createServerSupabaseClient();
   let targetActive = isActive;
   if (targetActive === undefined) {
@@ -1066,14 +1262,22 @@ export async function registerForGroupTrainingAction(formData: {
 }
 
 export async function cancelGroupRegistrationAction(id: string) {
+  const admin = await requireAdmin();
+  if (!admin.ok) {
+    return { error: admin.error };
+  }
   const supabase = await createServerSupabaseClient();
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("group_training_registrations")
     .update({ status: "cancelled" })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id");
   if (error) {
     console.error("Error cancelling registration:", error);
     return { error: "Грешка при отмяна на регистрацията." };
+  }
+  if (!updated || updated.length === 0) {
+    return { error: "Регистрацията не беше отменена — нямате права за тази операция." };
   }
   revalidatePath("/booking");
   revalidatePath("/admin");

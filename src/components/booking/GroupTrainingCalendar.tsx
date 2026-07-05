@@ -27,7 +27,7 @@ import type {
 import { AGE_GROUP_LABELS, DAY_NAMES_BG } from "@/lib/supabase";
 import {
   getGroupTrainings,
-  getGroupRegistrations,
+  getGroupRegistrationCounts,
   registerForGroupTrainingAction,
 } from "@/lib/actions";
 
@@ -93,7 +93,8 @@ export default function GroupTrainingCalendar() {
     getGroupTrainings().then((data) => {
       setTrainings(data as GroupTraining[]);
     });
-    getGroupRegistrations().then((data) => {
+    // Public page only needs counts — no personal data is fetched here
+    getGroupRegistrationCounts().then((data) => {
       setRegistrations(data as GroupTrainingRegistration[]);
     });
   }, []);
@@ -169,8 +170,8 @@ export default function GroupTrainingCalendar() {
         return;
       }
 
-      // Reload registrations from database
-      const updatedRegs = await getGroupRegistrations();
+      // Reload registration counts from database
+      const updatedRegs = await getGroupRegistrationCounts();
       setRegistrations(updatedRegs as GroupTrainingRegistration[]);
 
       setIsSubmitting(false);

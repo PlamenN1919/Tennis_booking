@@ -19,10 +19,11 @@ interface CoachBlock {
 
 interface CoachBlocksListProps {
   blocks: CoachBlock[];
+  coachAuth?: { coachId: string; pin: string };
   onBlocksUpdated: () => void;
 }
 
-export default function CoachBlocksList({ blocks, onBlocksUpdated }: CoachBlocksListProps) {
+export default function CoachBlocksList({ blocks, coachAuth, onBlocksUpdated }: CoachBlocksListProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("09:00");
@@ -39,7 +40,7 @@ export default function CoachBlocksList({ blocks, onBlocksUpdated }: CoachBlocks
     const startIso = new Date(`${date}T${startTime}:00`).toISOString();
     const endIso = new Date(`${date}T${endTime}:00`).toISOString();
     
-    const res = await createCoachBlock(startIso, endIso, reason);
+    const res = await createCoachBlock(startIso, endIso, reason, coachAuth);
     if (res.error) {
       toast.error(res.error);
     } else {
@@ -54,7 +55,7 @@ export default function CoachBlocksList({ blocks, onBlocksUpdated }: CoachBlocks
 
   const handleDelete = async (id: string) => {
     if (!confirm("Сигурни ли сте, че искате да изтриете това блокиране?")) return;
-    const res = await deleteCoachBlock(id);
+    const res = await deleteCoachBlock(id, coachAuth);
     if (res.error) {
       toast.error(res.error);
     } else {

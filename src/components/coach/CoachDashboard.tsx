@@ -31,6 +31,10 @@ const viewTitles: Record<CoachView, string> = {
 interface CoachSession {
   id: string;
   name: string;
+  // PIN is kept in the session so server actions can re-verify the coach
+  // (there is no Supabase auth session for coaches). Missing for sessions
+  // created before this field existed — those users must log in again.
+  pin?: string;
 }
 
 export default function CoachDashboard() {
@@ -204,6 +208,7 @@ export default function CoachDashboard() {
         return (
           <CoachBlocksList
             blocks={coachBlocks}
+            coachAuth={coach.pin ? { coachId: coach.id, pin: coach.pin } : undefined}
             onBlocksUpdated={() => {
               if (coach?.id) refreshBlocks(coach.id);
             }}

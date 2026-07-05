@@ -34,8 +34,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { mockCourts, mockCoaches } from "@/lib/mock-data";
-import { COURT_A_ID, COURT_B_ID } from "@/lib/booking-utils";
+import { mockCoaches } from "@/lib/mock-data";
+import { COURT_A_ID, COURT_B_ID, getCourtNameById } from "@/lib/booking-utils";
 import type { Booking } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 
@@ -69,7 +69,7 @@ export default function AdminBookingsList({ bookings, onCancelBooking }: AdminBo
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       result = result.filter((b) => {
-        const courtName = mockCourts.find((c) => c.id === b.court_id)?.name || "";
+        const courtName = getCourtNameById(b.court_id);
         const coachName = b.coach_id ? mockCoaches.find((c) => c.id === b.coach_id)?.name || "" : "";
         const customerName = (b as any).customer_name || "";
         const customerPhone = (b as any).customer_phone || "";
@@ -348,8 +348,7 @@ export default function AdminBookingsList({ bookings, onCancelBooking }: AdminBo
               {filteredBookings.map((booking) => {
                 const startTime = new Date(booking.start_time);
                 const endTime = new Date(booking.end_time);
-                const courtName =
-                  mockCourts.find((c) => c.id === booking.court_id)?.name || booking.court_id;
+                const courtName = getCourtNameById(booking.court_id);
                 const isCoaching = booking.booking_type === "coaching_session";
                 const coachName = booking.coach_id
                   ? mockCoaches.find((c) => c.id === booking.coach_id)?.name
@@ -522,7 +521,7 @@ export default function AdminBookingsList({ bookings, onCancelBooking }: AdminBo
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-500">Корт</span>
                   <Badge variant="secondary" className="text-xs">
-                    {mockCourts.find((c) => c.id === selectedBooking.court_id)?.name || selectedBooking.court_id}
+                    {getCourtNameById(selectedBooking.court_id)}
                   </Badge>
                 </div>
                 {selectedBooking.coach_id && (

@@ -144,16 +144,20 @@ export default function BookingFlow() {
           
           // 3. Add unsynced local bookings
           unsyncedBookings.forEach((b) => bookingsMap.set(b.id, b));
-          
-          const merged = Array.from(bookingsMap.values());
-          saveBookings(merged);
-          return merged;
+
+          return Array.from(bookingsMap.values());
         });
       })
       .catch(() => {
         // Supabase not available — keep using stored bookings
       });
   }, [selectedDate]);
+
+  // Persist bookings to localStorage whenever they change.
+  // (Kept outside the setState updater — updaters must stay side-effect free.)
+  useEffect(() => {
+    saveBookings(allBookings);
+  }, [allBookings]);
 
   // Listen for booking changes to keep state up-to-date
   useEffect(() => {
@@ -343,10 +347,14 @@ export default function BookingFlow() {
         return;
       }
 
-      // Server persisted — update local state and storage for immediate UI feedback
-      const serverBookingId = result?.booking?.id;
+      // Supabase not configured → local-only mode (dev); otherwise use the
+      // server-generated booking id so the local copy matches the DB row.
+      const isLocalMode = !!(result && "localMode" in result && result.localMode);
+      const serverBookingId =
+        !isLocalMode && result && "booking" in result ? result.booking?.id : undefined;
+
       const newBooking = buildLocalBooking(serverBookingId);
-      
+
       const finalCourtName = courts.find((c) => c.id === assignedCourt)?.name || "Корт A";
 
       setConfirmedBooking({
@@ -364,31 +372,8 @@ export default function BookingFlow() {
       setBookingConfirmed(true);
       setCurrentStep("confirmation");
     } catch (err: unknown) {
-      // If Supabase is not configured, fall back to local-only mode (dev)
-      const message = err instanceof Error ? err.message : "";
-      if (message.includes("Supabase not configured")) {
-        const newBooking = buildLocalBooking();
-        
-        const finalCourtName = courts.find((c) => c.id === assignedCourt)?.name || "Корт A";
-
-        setConfirmedBooking({
-          date: selectedDate,
-          time: selectedTime,
-          duration: effectiveDuration,
-          courtName: finalCourtName,
-          price: totalPrice,
-          bookingType,
-          coachingType: selectedCoachingType,
-        });
-
-        setAllBookings((prev) => [...prev, newBooking]);
-        addStoredBooking(newBooking);
-        setBookingConfirmed(true);
-        setCurrentStep("confirmation");
-      } else {
-        console.error("Booking error:", err);
-        alert("Грешка при създаване на резервацията. Моля, опитайте отново.");
-      }
+      console.error("Booking error:", err);
+      alert("Грешка при създаване на резервацията. Моля, опитайте отново.");
     } finally {
       setIsSubmitting(false);
     }

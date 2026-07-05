@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
 import { getCourts, getBookingsForDateRange } from "@/lib/actions";
+import { isSupabaseConfigured, isServerUserAdmin } from "@/lib/supabase-server";
 
 export async function GET() {
+  // Debug data (incl. customer names/phones) is admin-only
+  if (isSupabaseConfigured() && !(await isServerUserAdmin())) {
+    return NextResponse.json(
+      { success: false, error: "Admin login required" },
+      { status: 403 }
+    );
+  }
+
   try {
     const courts = await getCourts();
     const bookings = await getBookingsForDateRange("2026-06-04", "2026-07-04");
@@ -15,10 +24,10 @@ export async function GET() {
       bookingsCount: bookings.length,
       bookings,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json({
       success: false,
-      error: error.message || error,
+      error: error instanceof Error ? error.message : String(error),
     });
   }
 }

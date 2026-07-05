@@ -13,7 +13,8 @@ interface Coach {
   name: string;
   specialization: string | null;
   hourly_rate: number;
-  pin: string | null;
+  // Only present for logged-in admins (getCoaches hides PINs otherwise)
+  pin?: string | null;
   created_at: string;
 }
 

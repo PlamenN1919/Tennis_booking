@@ -29,8 +29,9 @@ import {
   CLOSING_HOUR,
   COURT_A_ID,
   COURT_B_ID,
+  getCourtNameById,
 } from "@/lib/booking-utils";
-import { mockCourts, mockCoaches } from "@/lib/mock-data";
+import { mockCoaches } from "@/lib/mock-data";
 import type { Booking } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 
@@ -84,8 +85,7 @@ export default function AdminCalendar({
     });
   };
 
-  const getCourtName = (id: string) =>
-    mockCourts.find((c) => c.id === id)?.name || id;
+  const getCourtName = (id: string) => getCourtNameById(id);
 
   const getCoachName = (id: string | null) => {
     if (!id) return null;

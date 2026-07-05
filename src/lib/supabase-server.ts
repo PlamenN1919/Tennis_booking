@@ -1,6 +1,15 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
+/**
+ * True when real Supabase credentials are present. When false the app runs
+ * in local mock mode (no database, no authentication infrastructure).
+ */
+export function isSupabaseConfigured(): boolean {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  return !!url && url !== "https://your-project.supabase.co" && url !== "https://placeholder.supabase.co";
+}
+
 export async function createServerSupabaseClient() {
   const cookieStore = await cookies();
 
@@ -49,4 +58,10 @@ export async function getServerUserProfile() {
     .single();
 
   return profile;
+}
+
+/** True when the current request carries a Supabase session with role "admin". */
+export async function isServerUserAdmin(): Promise<boolean> {
+  const profile = await getServerUserProfile();
+  return profile?.role === "admin";
 }

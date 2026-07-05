@@ -15,6 +15,8 @@ CREATE TABLE users (
   full_name TEXT NOT NULL,
   phone TEXT,
   role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin', 'coach')),
+  -- Read by createBooking() to enforce the per-day booking limit
+  max_daily_bookings INTEGER NOT NULL DEFAULT 3,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -107,9 +109,32 @@ CREATE INDEX idx_bookings_start_time ON bookings (start_time);
 
 -- ============================================
 -- 7. Row Level Security (RLS) Policies
+--
+-- IMPORTANT: policies must NOT query the table they protect (directly or
+-- through another policy) — Postgres raises error 42P17 "infinite recursion
+-- detected in policy for relation users" and the whole query fails. The
+-- original policies did exactly that (policy on users selecting from users),
+-- which caused intermittent failures on reads/writes. The SECURITY DEFINER
+-- helper functions below bypass RLS and break the cycle.
 -- ============================================
 ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+
+-- Helper: is the current auth user an admin? (bypasses RLS, no recursion)
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+AS $$
+  SELECT EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin');
+$$;
+
+-- Helper: coach_id linked to the current auth user (NULL if not a coach)
+CREATE OR REPLACE FUNCTION public.current_coach_id()
+RETURNS uuid
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+AS $$
+  SELECT coach_id FROM public.users WHERE id = auth.uid() AND role = 'coach';
+$$;
 
 -- Users can read their own data
 CREATE POLICY "Users can view own data" ON users
@@ -133,20 +158,33 @@ CREATE POLICY "Users can update own bookings" ON bookings
 
 -- Coaches can update bookings assigned to them
 CREATE POLICY "Coaches can update assigned bookings" ON bookings
-  FOR UPDATE USING (
-    EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'coach' AND coach_id = bookings.coach_id)
-  );
+  FOR UPDATE USING (coach_id IS NOT NULL AND coach_id = public.current_coach_id());
 
 -- Admins can do everything
 CREATE POLICY "Admins full access bookings" ON bookings
-  FOR ALL USING (
-    EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'admin')
-  );
+  FOR ALL USING (public.is_admin());
 
 CREATE POLICY "Admins full access users" ON users
-  FOR ALL USING (
-    EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'admin')
-  );
+  FOR ALL USING (public.is_admin());
+
+-- Courts and coaches: public read (availability / court names / PIN login
+-- lookup), writes only for logged-in admins. NOTE: coach PIN codes remain
+-- readable with the anon key because the PIN login itself runs
+-- unauthenticated — acceptable for this app's threat model.
+ALTER TABLE courts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE coaches ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can view courts" ON courts
+  FOR SELECT USING (true);
+
+CREATE POLICY "Admins full access courts" ON courts
+  FOR ALL USING (public.is_admin());
+
+CREATE POLICY "Anyone can view coaches" ON coaches
+  FOR SELECT USING (true);
+
+CREATE POLICY "Admins full access coaches" ON coaches
+  FOR ALL USING (public.is_admin());
 
 -- ============================================
 -- 8. Group Trainings Table (schedule set by admin)
@@ -199,16 +237,13 @@ CREATE POLICY "Anyone can view registrations" ON group_training_registrations
 CREATE POLICY "Anyone can register" ON group_training_registrations
   FOR INSERT WITH CHECK (true);
 
--- Admins full access
+-- Schedule management (create/toggle/delete trainings, cancel registrations)
+-- requires a logged-in admin (see admin login on /admin).
 CREATE POLICY "Admins full access group trainings" ON group_trainings
-  FOR ALL USING (
-    EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'admin')
-  );
+  FOR ALL USING (public.is_admin());
 
 CREATE POLICY "Admins full access registrations" ON group_training_registrations
-  FOR ALL USING (
-    EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'admin')
-  );
+  FOR ALL USING (public.is_admin());
 
 -- ============================================
 -- 10. Atomic max_participants enforcement for group trainings
@@ -271,19 +306,19 @@ ALTER TABLE coach_unavailability ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Anyone can view coach unavailability" ON coach_unavailability
   FOR SELECT USING (true);
 
--- Coaches can manage their own unavailability
+-- Coaches can manage their own unavailability (Supabase-auth coaches)
 CREATE POLICY "Coaches can insert own unavailability" ON coach_unavailability
-  FOR INSERT WITH CHECK (
-    EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'coach' AND coach_id = coach_unavailability.coach_id)
-  );
+  FOR INSERT WITH CHECK (coach_id = public.current_coach_id());
 
 CREATE POLICY "Coaches can delete own unavailability" ON coach_unavailability
-  FOR DELETE USING (
-    EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'coach' AND coach_id = coach_unavailability.coach_id)
-  );
+  FOR DELETE USING (coach_id = public.current_coach_id());
+
+-- The coach portal logs in with a PIN (no Supabase auth session), so writes
+-- arrive with the anon key. The server action verifies the PIN before
+-- inserting/deleting. Revisit once coaches get real Supabase auth.
+CREATE POLICY "Anon can manage coach unavailability" ON coach_unavailability
+  FOR ALL USING (true) WITH CHECK (true);
 
 -- Admins full access
 CREATE POLICY "Admins full access coach unavailability" ON coach_unavailability
-  FOR ALL USING (
-    EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'admin')
-  );
+  FOR ALL USING (public.is_admin());

@@ -5,9 +5,10 @@ import {
   Search,
   Bell,
   Menu,
-  X,
+  LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { mockBookings } from "@/lib/mock-data";
 import type { Booking } from "@/lib/supabase";
 import { groupTrainingsToVirtualBookings, setCourtIds } from "@/lib/booking-utils";
@@ -175,6 +176,17 @@ export default function AdminDashboard() {
 
   const handleNavigate = useCallback((view: AdminView) => {
     setCurrentView(view);
+  }, []);
+
+  const handleLogout = useCallback(async () => {
+    try {
+      const supabase = createBrowserSupabaseClient();
+      await supabase.auth.signOut();
+    } catch {
+      // Supabase unreachable/unconfigured — still reload to the login gate
+    } finally {
+      window.location.reload();
+    }
   }, []);
 
   // Group training handlers
@@ -398,6 +410,17 @@ export default function AdminDashboard() {
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white text-sm font-bold cursor-pointer">
               A
             </div>
+
+            {/* Logout */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full text-gray-400 hover:text-red-500"
+              onClick={handleLogout}
+              title="Изход"
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
           </div>
         </header>
 

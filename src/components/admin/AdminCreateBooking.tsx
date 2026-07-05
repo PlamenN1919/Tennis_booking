@@ -39,11 +39,11 @@ import {
   isSlotAvailable,
   calculateLocalPrice,
   getCourtHourlyPrice,
+  getCourtNameById,
   COACHING_PRICES,
   COACHING_LABELS,
   type CoachingType,
 } from "@/lib/booking-utils";
-import { mockCourts } from "@/lib/mock-data";
 import { createBooking, getCoaches } from "@/lib/actions";
 import type { Booking } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
@@ -99,12 +99,21 @@ export default function AdminCreateBooking({
 
   const hours = Array.from({ length: CLOSING_HOUR - OPENING_HOUR }, (_, i) => OPENING_HOUR + i);
 
+  // Safely parsed selected date. The date <Input> can be cleared or hold a
+  // partial value while typing — passing an Invalid Date to date-fns format()
+  // throws a RangeError and crashes the whole admin page.
+  const parsedSelectedDate = useMemo(() => {
+    if (!selectedDate) return null;
+    const [py, pm, pd] = selectedDate.split("-").map(Number);
+    if (!py || !pm || !pd) return null;
+    const d = new Date(py, pm - 1, pd);
+    return isNaN(d.getTime()) ? null : d;
+  }, [selectedDate]);
+
   // Get available slots for selected date
   const availableSlots = useMemo(() => {
-    if (!selectedDate) return {};
-    // Parse date components explicitly to avoid timezone shifts
-    const [py, pm, pd] = selectedDate.split("-").map(Number);
-    const date = new Date(py, pm - 1, pd);
+    if (!parsedSelectedDate) return {};
+    const date = parsedSelectedDate;
     const result: Record<string, { courtA: boolean; courtB: boolean }> = {};
 
     hours.forEach((h) => {
@@ -126,7 +135,7 @@ export default function AdminCreateBooking({
     });
 
     return result;
-  }, [selectedDate, bookings, durationHours, hours]);
+  }, [parsedSelectedDate, bookings, durationHours, hours]);
 
   // Auto-select court when time is selected
   useEffect(() => {
@@ -158,12 +167,12 @@ export default function AdminCreateBooking({
   const totalPrice = calculatePrice();
 
   const canProceedToDetails =
-    selectedDate && selectedTime && selectedCourt;
+    parsedSelectedDate && selectedTime && selectedCourt;
 
   const canSubmit = customerName.trim().length >= 2 && customerPhone.trim().length >= 7;
 
   const handleSubmit = async () => {
-    if (!canSubmit || !selectedTime || !selectedCourt) return;
+    if (!canSubmit || !selectedTime || !selectedCourt || !parsedSelectedDate) return;
 
     const [h] = selectedTime.split(":").map(Number);
 
@@ -248,7 +257,12 @@ export default function AdminCreateBooking({
     // All weeks validated — now create all bookings
     setIsSubmitting(true);
 
-    // Try persisting via server action (works when Supabase is configured)
+    // Bookings that will be pushed into local state after a successful save.
+    // When the server persists, we use the REAL rows it returns — fabricating
+    // local copies with fake ids caused duplicates (server + local copy of
+    // the same booking) that permanently blocked slots in the calendar.
+    let bookingsForUI: Booking[] = [];
+
     try {
       const result = await createBooking({
         bookingType,
@@ -271,26 +285,25 @@ export default function AdminCreateBooking({
         return;
       }
 
-      // Server persisted — update local state with server-generated booking
-      const serverBooking = result?.booking;
-      if (serverBooking) {
-        allNewBookings[0].id = serverBooking.id;
+      if (result && "localMode" in result && result.localMode) {
+        // Supabase not configured — dev/local mode, keep the local copies
+        bookingsForUI = allNewBookings;
+      } else {
+        const serverBookings =
+          (result && "bookings" in result && (result.bookings as Booking[])) || [];
+        bookingsForUI = serverBookings.length > 0 ? serverBookings : allNewBookings;
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "";
-      if (message.includes("Supabase not configured") || message.includes("using local mock")) {
-        console.log("Using local mock mode due to unconfigured Supabase");
-      } else {
-        // Real server/database exception — abort and show error!
-        console.error("Admin booking server error:", err);
-        alert(`Нещо се обърка при запис в базата данни: ${message || "Непозната грешка"}. Резервацията не беше създадена.`);
-        setIsSubmitting(false);
-        return;
-      }
+      // Real server/database exception — abort and show error!
+      console.error("Admin booking server error:", err);
+      alert(`Нещо се обърка при запис в базата данни: ${message || "Непозната грешка"}. Резервацията не беше създадена.`);
+      setIsSubmitting(false);
+      return;
     }
 
     // Update local state for immediate UI feedback
-    for (const newBooking of allNewBookings) {
+    for (const newBooking of bookingsForUI) {
       onBookingCreated(newBooking);
     }
 
@@ -339,8 +352,9 @@ export default function AdminCreateBooking({
             </div>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Резервацията е създадена!</h2>
             <p className="text-sm text-gray-500 mb-6">
-              {customerName} • {format(new Date(selectedDate), "d MMMM yyyy", { locale: bg })} •{" "}
-              {selectedTime} • {mockCourts.find((c) => c.id === selectedCourt)?.name}
+              {customerName} •{" "}
+              {parsedSelectedDate ? format(parsedSelectedDate, "d MMMM yyyy", { locale: bg }) : selectedDate} •{" "}
+              {selectedTime} • {getCourtNameById(selectedCourt)}
               {isRecurring && ` • ${recurringWeeks} седмици`}
             </p>
             <div className="bg-gray-50 rounded-xl p-4 mb-6">
@@ -584,7 +598,9 @@ export default function AdminCreateBooking({
                 <Label className="text-sm font-semibold text-gray-700 mb-3 block">
                   Час
                   <span className="font-normal text-gray-400 ml-2">
-                    ({format(new Date(selectedDate), "d MMMM", { locale: bg })})
+                    ({parsedSelectedDate
+                      ? format(parsedSelectedDate, "d MMMM", { locale: bg })
+                      : "изберете дата"})
                   </span>
                 </Label>
                 <div className="grid grid-cols-5 gap-2">
@@ -855,7 +871,9 @@ export default function AdminCreateBooking({
                     <div className="flex items-center gap-1.5">
                       <CalendarDays className="w-3.5 h-3.5 text-gray-400" />
                       <p className="text-sm font-semibold">
-                        {format(new Date(selectedDate), "d MMM yyyy", { locale: bg })}
+                        {parsedSelectedDate
+                          ? format(parsedSelectedDate, "d MMM yyyy", { locale: bg })
+                          : "—"}
                       </p>
                     </div>
                   </div>
@@ -871,7 +889,7 @@ export default function AdminCreateBooking({
                   <div>
                     <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Корт</p>
                     <Badge variant="secondary" className="text-xs">
-                      {mockCourts.find((c) => c.id === selectedCourt)?.name}
+                      {getCourtNameById(selectedCourt)}
                     </Badge>
                   </div>
                 </div>

@@ -16,10 +16,9 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { mockCourts, mockCoaches } from "@/lib/mock-data";
 import type { Booking } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
-import { OPENING_HOUR, CLOSING_HOUR, COURT_A_ID, COURT_B_ID } from "@/lib/booking-utils";
+import { OPENING_HOUR, CLOSING_HOUR, COURT_A_ID, COURT_B_ID, getCourtNameById } from "@/lib/booking-utils";
 
 interface AdminOverviewProps {
   bookings: Booking[];
@@ -380,8 +379,7 @@ export default function AdminOverview({ bookings, onNavigate }: AdminOverviewPro
               ) : (
                 upcoming.map((booking) => {
                   const startTime = new Date(booking.start_time);
-                  const courtName =
-                    mockCourts.find((c) => c.id === booking.court_id)?.name || booking.court_id;
+                  const courtName = getCourtNameById(booking.court_id);
                   const isCoaching = booking.booking_type === "coaching_session";
 
                   return (

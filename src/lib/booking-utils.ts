@@ -35,6 +35,17 @@ export function getCourtIds(): [string, string] {
   return [COURT_A_ID, COURT_B_ID];
 }
 
+/**
+ * Resolve a court id (runtime UUID or mock id) to a display name.
+ * mockCourts snapshots the ids at module load, so lookups against it break
+ * once setCourtIds() swaps in the real Supabase UUIDs — use this instead.
+ */
+export function getCourtNameById(courtId: string): string {
+  if (courtId === COURT_A_ID || courtId === "court-a") return "Корт A";
+  if (courtId === COURT_B_ID || courtId === "court-b") return "Корт B";
+  return courtId;
+}
+
 // ============================================
 // Pricing
 // ============================================
