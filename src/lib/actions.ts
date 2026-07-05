@@ -9,6 +9,7 @@ import { bookingSubmitSchema } from "@/lib/validations";
 import { revalidatePath } from "next/cache";
 import { v4 as uuidv4 } from "uuid";
 import { sofiaToUTC } from "@/lib/booking-utils";
+import type { Booking } from "@/lib/supabase";
 
 // ============================================
 // Authorization helper
@@ -27,6 +28,14 @@ async function requireAdmin(): Promise<{ ok: true } | { ok: false; error: string
   }
   return { ok: false, error: "Изисква се вход като администратор." };
 }
+
+// Booking columns safe for ANONYMOUS reads — everything needed for
+// availability display, WITHOUT personal data (customer name/email/phone,
+// notes). The DB enforces this too: anon has column-level SELECT grants on
+// exactly these columns (see supabase/privacy-and-coach-portal.sql), so an
+// anon `select("*")` on bookings would be rejected outright.
+const PUBLIC_BOOKING_COLUMNS =
+  "id, user_id, court_id, coach_id, start_time, end_time, booking_type, status, total_price, duration_hours, is_recurring, recurring_group_id, created_at";
 
 // ============================================
 // Booking Actions
@@ -315,10 +324,12 @@ export async function createBooking(formData: {
     });
   }
 
+  // RETURNING only anon-readable columns (guests lack SELECT on personal
+  // columns); the customer fields are merged back below from the input.
   const { data: created, error } = await supabase
     .from("bookings")
     .insert(bookings)
-    .select();
+    .select(PUBLIC_BOOKING_COLUMNS);
 
   if (error) {
     console.error("Booking creation error:", error);
@@ -327,6 +338,13 @@ export async function createBooking(formData: {
     }
     return { error: "Грешка при създаване на резервацията." };
   }
+
+  const createdWithCustomer = (created || []).map((b) => ({
+    ...b,
+    customer_name: data.customerName,
+    customer_phone: data.customerPhone,
+    customer_email: data.customerEmail || "",
+  }));
 
   // Send confirmation email
   if (data.customerEmail) {
@@ -353,10 +371,10 @@ export async function createBooking(formData: {
 
   return {
     success: true,
-    booking: created?.[0],
+    booking: createdWithCustomer[0],
     // All rows created in this call (recurring bookings create one per week);
     // clients should use these instead of fabricating local copies.
-    bookings: created || [],
+    bookings: createdWithCustomer,
     totalBookings: bookings.length,
   };
 }
@@ -367,6 +385,12 @@ export async function cancelBooking(bookingId: string) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // Cancellation requires an authenticated user (admin or booking owner).
+  // Checked BEFORE any reads — guests also lack SELECT on personal columns.
+  if (!user) {
+    return { error: "Трябва да сте влезли в акаунта си, за да отмените резервация." };
+  }
 
   // Get the booking first
   const { data: booking } = await supabase
@@ -380,20 +404,14 @@ export async function cancelBooking(bookingId: string) {
   }
 
   // Check permission (user can cancel own, admin can cancel any)
-  if (user) {
-    const { data: profile } = await supabase
-      .from("users")
-      .select("role")
-      .eq("id", user.id)
-      .single();
+  const { data: profile } = await supabase
+    .from("users")
+    .select("role")
+    .eq("id", user.id)
+    .single();
 
-    if (profile?.role !== "admin" && booking.user_id !== user.id) {
-      return { error: "Нямате право да отмените тази резервация." };
-    }
-  } else {
-    // Cancellation requires an authenticated user (admin or booking owner).
-    // RLS blocks anonymous updates anyway — fail early with a clear message.
-    return { error: "Трябва да сте влезли в акаунта си, за да отмените резервация." };
+  if (profile?.role !== "admin" && booking.user_id !== user.id) {
+    return { error: "Нямате право да отмените тази резервация." };
   }
 
   // Check if booking is in the past
@@ -486,27 +504,55 @@ export async function cancelRecurringBookings(recurringGroupId: string) {
   return { success: true };
 }
 
-export async function getBookingsForDate(date: string) {
-  const supabase = await createServerSupabaseClient();
+/**
+ * Convert an inclusive Sofia-local date range into UTC ISO bounds.
+ */
+function rangeToUTC(startDate: string, endDate: string): { startUTC: string; endUTC: string } {
+  const [ey, em, ed] = endDate.split("-").map(Number);
+  const endLocal = new Date(ey, em - 1, ed);
+  endLocal.setDate(endLocal.getDate() + 1);
+  const nextDayStr = `${endLocal.getFullYear()}-${String(endLocal.getMonth() + 1).padStart(2, "0")}-${String(endLocal.getDate()).padStart(2, "0")}`;
+  return {
+    startUTC: sofiaToUTC(startDate, "00:00"),
+    endUTC: sofiaToUTC(nextDayStr, "00:00"),
+  };
+}
 
-  const { data, error } = await supabase
-    .from("bookings")
-    .select("*, court:courts(*), coach:coaches(*)")
-    .gte("start_time", `${date}T00:00:00+00:00`)
-    .lte("start_time", `${date}T23:59:59+00:00`)
-    .neq("status", "cancelled");
-
-  if (error) {
-    console.error("Error fetching bookings:", error);
+/**
+ * PUBLIC availability data for a date range (inclusive) — only the columns
+ * needed to show free/busy slots, no customer personal data. This is what
+ * the public booking page uses.
+ */
+export async function getPublicBookingsForDateRange(startDate: string, endDate: string) {
+  if (!isSupabaseConfigured()) {
+    // Supabase not configured — return empty to let caller use mock data
     return [];
   }
 
-  return data || [];
+  const supabase = await createServerSupabaseClient();
+  const { startUTC, endUTC } = rangeToUTC(startDate, endDate);
+
+  const { data, error } = await supabase
+    .from("bookings")
+    .select(PUBLIC_BOOKING_COLUMNS)
+    .gte("start_time", startUTC)
+    .lt("start_time", endUTC)
+    .neq("status", "cancelled");
+
+  if (error) {
+    console.error("Error fetching public bookings for range:", error);
+    return [];
+  }
+
+  // Rows lack the personal columns (notes/customer_*) by design; consumers
+  // only use them for availability and guard those fields.
+  return (data as unknown as Booking[]) || [];
 }
 
 /**
  * Fetch all non-cancelled bookings for a date range (inclusive).
- * Used by client components to load real data from the database.
+ * Full rows (incl. customer data) only for a logged-in admin; anyone else
+ * gets the public columns. Coaches use getCoachBookingsForRange instead.
  */
 export async function getBookingsForDateRange(startDate: string, endDate: string) {
   if (!isSupabaseConfigured()) {
@@ -514,15 +560,13 @@ export async function getBookingsForDateRange(startDate: string, endDate: string
     return [];
   }
 
+  const admin = await requireAdmin();
+  if (!admin.ok) {
+    return getPublicBookingsForDateRange(startDate, endDate);
+  }
+
   const supabase = await createServerSupabaseClient();
-
-  const [ey, em, ed] = endDate.split("-").map(Number);
-  const endLocal = new Date(ey, em - 1, ed);
-  endLocal.setDate(endLocal.getDate() + 1);
-  const nextDayStr = `${endLocal.getFullYear()}-${String(endLocal.getMonth() + 1).padStart(2,'0')}-${String(endLocal.getDate()).padStart(2,'0')}`;
-
-  const startUTC = sofiaToUTC(startDate, "00:00");
-  const endUTC = sofiaToUTC(nextDayStr, "00:00");
+  const { startUTC, endUTC } = rangeToUTC(startDate, endDate);
 
   const { data, error } = await supabase
     .from("bookings")
@@ -539,33 +583,74 @@ export async function getBookingsForDateRange(startDate: string, endDate: string
   return data || [];
 }
 
-export async function getBookingsForWeek(weekStart: string) {
+/**
+ * Full rows for the bookings of ONE coach, authenticated by PIN. Runs through
+ * a SECURITY DEFINER RPC because the anon role can't read personal columns.
+ */
+export async function getCoachBookingsForRange(
+  startDate: string,
+  endDate: string,
+  coachAuth: { coachId: string; pin: string }
+) {
+  if (!isSupabaseConfigured() || !coachAuth?.coachId || !coachAuth?.pin) {
+    return [];
+  }
+
   const supabase = await createServerSupabaseClient();
+  const { startUTC, endUTC } = rangeToUTC(startDate, endDate);
 
-  const [wy, wm, wd] = weekStart.split("-").map(Number);
-  const startLocal = new Date(wy, wm - 1, wd);
-  
-  const endLocal = new Date(startLocal);
-  endLocal.setDate(endLocal.getDate() + 7);
-  
-  const nextMondayStr = `${endLocal.getFullYear()}-${String(endLocal.getMonth() + 1).padStart(2,'0')}-${String(endLocal.getDate()).padStart(2,'0')}`;
-  
-  const startUTC = sofiaToUTC(weekStart, "00:00");
-  const endUTC = sofiaToUTC(nextMondayStr, "00:00");
-
-  const { data, error } = await supabase
-    .from("bookings")
-    .select("*, court:courts(*), coach:coaches(*)")
-    .gte("start_time", startUTC)
-    .lt("start_time", endUTC)
-    .neq("status", "cancelled");
+  const { data, error } = await supabase.rpc("get_coach_bookings", {
+    coach_id_input: coachAuth.coachId,
+    pin_input: coachAuth.pin,
+    start_ts: startUTC,
+    end_ts: endUTC,
+  });
 
   if (error) {
-    console.error("Error fetching bookings:", error);
+    // Function not deployed yet or invalid PIN — calendar still works from
+    // the public data, only client names are missing.
+    console.error("get_coach_bookings RPC error:", error);
     return [];
   }
 
   return data || [];
+}
+
+/**
+ * Cancel a booking from the coach portal (PIN-authenticated). Uses a
+ * SECURITY DEFINER RPC: the anon role has no UPDATE permission on bookings.
+ */
+export async function cancelBookingAsCoach(
+  bookingId: string,
+  coachAuth: { coachId: string; pin: string }
+) {
+  if (!coachAuth?.coachId || !coachAuth?.pin) {
+    return { error: "Липсва треньорска сесия. Излезте и влезте отново с вашия PIN." };
+  }
+  if (!isSupabaseConfigured()) {
+    return { success: true };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const { data: cancelled, error } = await supabase.rpc("cancel_coach_booking", {
+    booking_id_input: bookingId,
+    coach_id_input: coachAuth.coachId,
+    pin_input: coachAuth.pin,
+  });
+
+  if (error) {
+    console.error("cancel_coach_booking RPC error:", error);
+    return { error: "Грешка при отмяна на резервацията." };
+  }
+
+  if (!cancelled) {
+    return { error: "Резервацията не беше отменена — тя не е ваша, вече е минала или е отменена." };
+  }
+
+  revalidatePath("/coach");
+  revalidatePath("/admin");
+  revalidatePath("/booking");
+  return { success: true };
 }
 
 export async function getUserBookings() {
@@ -749,131 +834,6 @@ export async function getCourts() {
   }
 
   return data || [];
-}
-
-export async function getAdminStats() {
-  const supabase = await createServerSupabaseClient();
-
-  const { data: bookings } = await supabase
-    .from("bookings")
-    .select("*")
-    .eq("status", "confirmed");
-
-  const allBookings = bookings || [];
-
-  const now = new Date();
-  
-  // Helpers for admin stats in Europe/Sofia timezone
-  const getSofiaMonthAndYear = (d: Date) => {
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Europe/Sofia',
-      year: 'numeric',
-      month: 'numeric'
-    });
-    const parts = formatter.formatToParts(d);
-    const partMap: Record<string, string> = {};
-    parts.forEach(p => partMap[p.type] = p.value);
-    return {
-      month: parseInt(partMap.month, 10) - 1,
-      year: parseInt(partMap.year, 10)
-    };
-  };
-
-  const getSofiaDateString = (d: Date) => {
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Europe/Sofia',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    });
-    const parts = formatter.formatToParts(d);
-    const partMap: Record<string, string> = {};
-    parts.forEach(p => partMap[p.type] = p.value);
-    return `${partMap.year}-${partMap.month}-${partMap.day}`;
-  };
-
-  const getSofiaHour = (d: Date) => {
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Europe/Sofia',
-      hour: '2-digit',
-      hour12: false
-    });
-    return parseInt(formatter.format(d), 10);
-  };
-
-  const nowSofia = getSofiaMonthAndYear(now);
-
-  const thisMonth = allBookings.filter((b) => {
-    const d = new Date(b.start_time);
-    const dSofia = getSofiaMonthAndYear(d);
-    return dSofia.month === nowSofia.month && dSofia.year === nowSofia.year;
-  });
-
-  let lastMonthSofiaMonth = nowSofia.month - 1;
-  let lastMonthSofiaYear = nowSofia.year;
-  if (lastMonthSofiaMonth < 0) {
-    lastMonthSofiaMonth = 11;
-    lastMonthSofiaYear -= 1;
-  }
-
-  const lastMonth = allBookings.filter((b) => {
-    const d = new Date(b.start_time);
-    const dSofia = getSofiaMonthAndYear(d);
-    return dSofia.month === lastMonthSofiaMonth && dSofia.year === lastMonthSofiaYear;
-  });
-
-  const thisMonthRevenue = thisMonth.reduce((s, b) => s + b.total_price, 0);
-  const lastMonthRevenue = lastMonth.reduce((s, b) => s + b.total_price, 0);
-
-  const revenueGrowth =
-    lastMonthRevenue > 0
-      ? ((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100
-      : 0;
-
-  // Hourly distribution — match actual business hours (8–24)
-  const hourlyDistribution: Record<number, number> = {};
-  for (let h = 8; h < 24; h++) hourlyDistribution[h] = 0;
-  allBookings.forEach((b) => {
-    const hour = getSofiaHour(new Date(b.start_time));
-    if (hourlyDistribution[hour] !== undefined) {
-      hourlyDistribution[hour]++;
-    }
-  });
-
-  // Daily distribution (for this week)
-  const nowSofiaDateStr = getSofiaDateString(now);
-  const [ny, nm, nd] = nowSofiaDateStr.split('-').map(Number);
-  const weekStart = new Date(ny, nm - 1, nd);
-  const dayOfWeek = weekStart.getDay();
-  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-  weekStart.setDate(weekStart.getDate() + mondayOffset);
-  
-  const dailyDistribution: Record<string, number> = {};
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(weekStart);
-    d.setDate(d.getDate() + i);
-    const yStr = d.getFullYear();
-    const mStr = String(d.getMonth() + 1).padStart(2, "0");
-    const dStr = String(d.getDate()).padStart(2, "0");
-    const key = `${yStr}-${mStr}-${dStr}`;
-    dailyDistribution[key] = allBookings.filter((b) => {
-      const bd = getSofiaDateString(new Date(b.start_time));
-      return bd === key;
-    }).length;
-  }
-
-  return {
-    totalBookings: allBookings.length,
-    totalRevenue: allBookings.reduce((s, b) => s + b.total_price, 0),
-    thisMonthBookings: thisMonth.length,
-    thisMonthRevenue,
-    lastMonthRevenue,
-    revenueGrowth: Math.round(revenueGrowth),
-    courtRentals: allBookings.filter((b) => b.booking_type === "court_rental").length,
-    coachingSessions: allBookings.filter((b) => b.booking_type === "coaching_session").length,
-    hourlyDistribution,
-    dailyDistribution,
-  };
 }
 
 // ============================================

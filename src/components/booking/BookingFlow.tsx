@@ -55,8 +55,13 @@ import {
 import { mockBookings, mockCourts } from "@/lib/mock-data";
 import { getStoredGroupTrainings } from "@/lib/group-training-storage";
 import { getStoredBookings, saveBookings, addStoredBooking } from "@/lib/booking-storage";
-import { createBooking, getCourts, getBookingsForDateRange } from "@/lib/actions";
-import type { Booking } from "@/lib/supabase";
+import {
+  createBooking,
+  getCourts,
+  getPublicBookingsForDateRange,
+  getGroupTrainings,
+} from "@/lib/actions";
+import type { Booking, GroupTraining } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 
 type BookingType = "court_rental" | "coaching_session";
@@ -118,7 +123,7 @@ export default function BookingFlow() {
     const startStr = format(start, "yyyy-MM-dd");
     const endStr = format(end, "yyyy-MM-dd");
 
-    getBookingsForDateRange(startStr, endStr)
+    getPublicBookingsForDateRange(startStr, endStr)
       .then((serverBookings) => {
         const localBookings = getStoredBookings();
         const unsyncedBookings = localBookings.filter(
@@ -182,13 +187,25 @@ export default function BookingFlow() {
     };
   }, []);
 
+  // Load group trainings from the SERVER so fresh visitors see their slots
+  // as occupied too — localStorage only has them if this browser opened the
+  // admin panel before. Falls back to stored data in local mock mode.
+  const [serverGroupTrainings, setServerGroupTrainings] = useState<GroupTraining[] | null>(null);
+  useEffect(() => {
+    getGroupTrainings()
+      .then((data) => setServerGroupTrainings(data as GroupTraining[]))
+      .catch(() => {
+        // Supabase not available — keep using stored group trainings
+      });
+  }, [gtVersion]);
+
   // Merge group-training virtual bookings so court availability checks account for them
   const allBookingsWithGT = useMemo(() => {
-    const storedGT = getStoredGroupTrainings();
-    const virtualBookings = groupTrainingsToVirtualBookings(storedGT, allBookings);
+    const trainings = serverGroupTrainings ?? getStoredGroupTrainings();
+    const virtualBookings = groupTrainingsToVirtualBookings(trainings, allBookings);
     return [...allBookings, ...virtualBookings];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allBookings, gtVersion]);
+  }, [allBookings, serverGroupTrainings, gtVersion]);
 
   // Calculate available slots
   const timeSlots = useMemo(() => {

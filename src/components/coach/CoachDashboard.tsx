@@ -10,7 +10,14 @@ import {
 import { Button } from "@/components/ui/button";
 import type { Booking } from "@/lib/supabase";
 import { setCourtIds } from "@/lib/booking-utils";
-import { getCourts, getBookingsForDateRange, getCoachBlocks, getGroupTrainings } from "@/lib/actions";
+import {
+  getCourts,
+  getPublicBookingsForDateRange,
+  getCoachBookingsForRange,
+  cancelBookingAsCoach,
+  getCoachBlocks,
+  getGroupTrainings,
+} from "@/lib/actions";
 import { format } from "date-fns";
 import CoachSidebar, { type CoachView } from "./CoachSidebar";
 import CoachLogin from "./CoachLogin";
@@ -87,21 +94,32 @@ export default function CoachDashboard() {
     start.setDate(start.getDate() - 30);
     const end = new Date(today);
     end.setDate(end.getDate() + 180);
+    const startStr = format(start, "yyyy-MM-dd");
+    const endStr = format(end, "yyyy-MM-dd");
 
-    getBookingsForDateRange(format(start, "yyyy-MM-dd"), format(end, "yyyy-MM-dd"))
-      .then((serverBookings) => {
-        if (serverBookings.length > 0) {
-          setAllBookings(serverBookings);
-        }
-      })
-      .catch(() => {});
+    // Calendar occupancy: public columns only (no customer personal data).
+    // The coach's OWN bookings come in full via the PIN-verified RPC and
+    // override the slim rows, so client names show only for their sessions.
+    const publicPromise = getPublicBookingsForDateRange(startStr, endStr).catch(() => []);
+    const ownPromise = coach?.pin
+      ? getCoachBookingsForRange(startStr, endStr, { coachId: coach.id, pin: coach.pin }).catch(() => [])
+      : Promise.resolve([]);
+
+    Promise.all([publicPromise, ownPromise]).then(([publicBookings, ownBookings]) => {
+      const merged = new Map<string, Booking>();
+      (publicBookings as Booking[]).forEach((b) => merged.set(b.id, b));
+      (ownBookings as Booking[]).forEach((b) => merged.set(b.id, b));
+      if (merged.size > 0) {
+        setAllBookings(Array.from(merged.values()));
+      }
+    });
 
     getGroupTrainings()
       .then((data) => {
         setGroupTrainings(data as GroupTraining[]);
       })
       .catch(() => {});
-  }, []);
+  }, [coach]);
 
   const refreshBlocks = useCallback((id: string) => {
     const startStr = format(new Date(), "yyyy-MM-dd");
@@ -119,10 +137,32 @@ export default function CoachDashboard() {
   }, [coach, refreshBlocks]);
 
   const handleCancelBooking = useCallback((id: string) => {
+    if (!coach?.pin) {
+      alert("Сесията ви е от стара версия. Излезте и влезте отново с вашия PIN, за да отменяте резервации.");
+      return;
+    }
+
+    // Optimistic update, rolled back if the server refuses
     setAllBookings((prev) =>
       prev.map((b) => (b.id === id ? { ...b, status: "cancelled" as const } : b))
     );
-  }, []);
+
+    cancelBookingAsCoach(id, { coachId: coach.id, pin: coach.pin })
+      .then((result) => {
+        if (result && "error" in result && result.error) {
+          alert(result.error);
+          setAllBookings((prev) =>
+            prev.map((b) => (b.id === id ? { ...b, status: "confirmed" as const } : b))
+          );
+        }
+      })
+      .catch(() => {
+        alert("Неуспешно свързване със сървъра за отмяна на резервацията.");
+        setAllBookings((prev) =>
+          prev.map((b) => (b.id === id ? { ...b, status: "confirmed" as const } : b))
+        );
+      });
+  }, [coach]);
 
   const handleBookingCreated = useCallback((newBooking: Booking) => {
     setAllBookings((prev) => [...prev, newBooking]);

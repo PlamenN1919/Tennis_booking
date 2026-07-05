@@ -216,3 +216,75 @@ CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings (status);
 CREATE INDEX IF NOT EXISTS idx_bookings_start_time ON bookings (start_time);
 CREATE INDEX IF NOT EXISTS idx_group_training_reg_training ON group_training_registrations (group_training_id, date);
 CREATE INDEX IF NOT EXISTS idx_group_training_reg_status ON group_training_registrations (status);
+
+-- ============================================
+-- 6. Лични данни и треньорски RPC функции (виж privacy-and-coach-portal.sql)
+-- ============================================
+
+-- ------------------------------------------------
+-- 1. Колонни права за anon върху bookings
+-- ------------------------------------------------
+REVOKE SELECT ON public.bookings FROM anon;
+GRANT SELECT (
+  id, user_id, court_id, coach_id, start_time, end_time,
+  booking_type, status, total_price, duration_hours,
+  is_recurring, recurring_group_id, created_at
+) ON public.bookings TO anon;
+
+-- ------------------------------------------------
+-- 2. PIN-верифициран достъп за треньорския портал
+-- ------------------------------------------------
+
+-- Пълните редове на резервациите на ЕДИН треньор, след проверка на PIN
+CREATE OR REPLACE FUNCTION public.get_coach_bookings(
+  coach_id_input uuid,
+  pin_input text,
+  start_ts timestamptz,
+  end_ts timestamptz
+)
+RETURNS SETOF public.bookings
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+AS $$
+  SELECT b.*
+  FROM public.bookings b
+  WHERE EXISTS (
+      SELECT 1 FROM public.coaches c
+      WHERE c.id = coach_id_input AND c.pin = pin_input
+    )
+    AND b.coach_id = coach_id_input
+    AND b.start_time >= start_ts
+    AND b.start_time < end_ts
+    AND b.status <> 'cancelled';
+$$;
+
+-- Отмяна на СОБСТВЕНА бъдеща резервация, след проверка на PIN
+CREATE OR REPLACE FUNCTION public.cancel_coach_booking(
+  booking_id_input uuid,
+  coach_id_input uuid,
+  pin_input text
+)
+RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  affected integer;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.coaches c
+    WHERE c.id = coach_id_input AND c.pin = pin_input
+  ) THEN
+    RETURN false;
+  END IF;
+
+  UPDATE public.bookings
+  SET status = 'cancelled'
+  WHERE id = booking_id_input
+    AND coach_id = coach_id_input
+    AND status = 'confirmed'
+    AND start_time > now();
+
+  GET DIAGNOSTICS affected = ROW_COUNT;
+  RETURN affected > 0;
+END;
+$$;
