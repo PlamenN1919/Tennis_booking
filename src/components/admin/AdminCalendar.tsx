@@ -286,11 +286,14 @@ export default function AdminCalendar({
                                     <p className="text-[10px] font-bold truncate leading-tight">
                                       {courtABooking.id.startsWith("virtual-gt-")
                                         ? "Групова"
-                                        : courtABooking.booking_type === "coaching_session" ? "Тренировка" : "Наем"}
+                                        : courtABooking.customer_name
+                                        || (courtABooking.booking_type === "coaching_session" ? "Тренировка" : "Наем")}
                                     </p>
-                                    {courtABooking.notes && (
+                                    {(courtABooking.customer_name || courtABooking.notes) && (
                                       <p className="text-[9px] opacity-70 truncate mt-0.5">
-                                        {courtABooking.notes.split("\n")[0].substring(0, 20)}
+                                        {courtABooking.id.startsWith("virtual-gt-")
+                                          ? (courtABooking.notes || "").split("\n")[0].substring(0, 20)
+                                          : courtABooking.booking_type === "coaching_session" ? "Тренировка" : "Наем"}
                                       </p>
                                     )}
                                   </button>
@@ -320,11 +323,14 @@ export default function AdminCalendar({
                                     <p className="text-[10px] font-bold truncate leading-tight">
                                       {courtBBooking.id.startsWith("virtual-gt-")
                                         ? "Групова"
-                                        : courtBBooking.booking_type === "coaching_session" ? "Тренировка" : "Наем"}
+                                        : courtBBooking.customer_name
+                                        || (courtBBooking.booking_type === "coaching_session" ? "Тренировка" : "Наем")}
                                     </p>
-                                    {courtBBooking.notes && (
+                                    {(courtBBooking.customer_name || courtBBooking.notes) && (
                                       <p className="text-[9px] opacity-70 truncate mt-0.5">
-                                        {courtBBooking.notes.split("\n")[0].substring(0, 20)}
+                                        {courtBBooking.id.startsWith("virtual-gt-")
+                                          ? (courtBBooking.notes || "").split("\n")[0].substring(0, 20)
+                                          : courtBBooking.booking_type === "coaching_session" ? "Тренировка" : "Наем"}
                                       </p>
                                     )}
                                   </button>
