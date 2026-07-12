@@ -246,52 +246,52 @@ export default function AdminGroupTrainings({
   return (
     <div className="space-y-6">
       {/* Header Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="border-0 shadow-sm bg-gradient-to-br from-blue-50 to-blue-100/50">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        <Card className="py-0 border-0 shadow-sm bg-gradient-to-br from-blue-50 to-blue-100/50">
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex flex-col sm:flex-row items-center text-center sm:text-left gap-1.5 sm:gap-3">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
                 <Calendar className="w-5 h-5 text-blue-600" />
               </div>
-              <div>
-                <p className="text-2xl font-bold text-blue-700">
+              <div className="min-w-0">
+                <p className="text-xl sm:text-2xl font-bold text-blue-700">
                   {totalActiveTrainings}
                 </p>
-                <p className="text-xs text-blue-600/70">Активни тренировки</p>
+                <p className="text-[10px] sm:text-xs text-blue-600/70">Активни тренировки</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm bg-gradient-to-br from-green-50 to-green-100/50">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center">
+        <Card className="py-0 border-0 shadow-sm bg-gradient-to-br from-green-50 to-green-100/50">
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex flex-col sm:flex-row items-center text-center sm:text-left gap-1.5 sm:gap-3">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-green-500/10 flex items-center justify-center shrink-0">
                 <Users className="w-5 h-5 text-green-600" />
               </div>
-              <div>
-                <p className="text-2xl font-bold text-green-700">
+              <div className="min-w-0">
+                <p className="text-xl sm:text-2xl font-bold text-green-700">
                   {totalRegistrations}
                 </p>
-                <p className="text-xs text-green-600/70">
-                  Общо записани деца
+                <p className="text-[10px] sm:text-xs text-green-600/70">
+                  Записани деца
                 </p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm bg-gradient-to-br from-orange-50 to-orange-100/50">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center">
+        <Card className="py-0 border-0 shadow-sm bg-gradient-to-br from-orange-50 to-orange-100/50">
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex flex-col sm:flex-row items-center text-center sm:text-left gap-1.5 sm:gap-3">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-orange-500/10 flex items-center justify-center shrink-0">
                 <GraduationCap className="w-5 h-5 text-orange-600" />
               </div>
-              <div>
-                <p className="text-2xl font-bold text-orange-700">
+              <div className="min-w-0">
+                <p className="text-xl sm:text-2xl font-bold text-orange-700">
                   {groupTrainings.length}
                 </p>
-                <p className="text-xs text-orange-600/70">Общо графици</p>
+                <p className="text-[10px] sm:text-xs text-orange-600/70">Общо графици</p>
               </div>
             </div>
           </CardContent>
@@ -299,30 +299,32 @@ export default function AdminGroupTrainings({
       </div>
 
       {/* Tab Switcher */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-full sm:w-fit">
         <button
           onClick={() => setActiveTab("calendar")}
           className={cn(
-            "px-4 py-2 rounded-lg text-sm font-medium transition-all",
+            "flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-1.5",
             activeTab === "calendar"
               ? "bg-white text-gray-900 shadow-sm"
               : "text-gray-500 hover:text-gray-700"
           )}
         >
-          <Calendar className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
-          Седмичен календар
+          <Calendar className="w-4 h-4 shrink-0" />
+          <span className="sm:hidden">Календар</span>
+          <span className="hidden sm:inline">Седмичен календар</span>
         </button>
         <button
           onClick={() => setActiveTab("schedule")}
           className={cn(
-            "px-4 py-2 rounded-lg text-sm font-medium transition-all",
+            "flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-1.5",
             activeTab === "schedule"
               ? "bg-white text-gray-900 shadow-sm"
               : "text-gray-500 hover:text-gray-700"
           )}
         >
-          <Clock className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
-          Управление на графика
+          <Clock className="w-4 h-4 shrink-0" />
+          <span className="sm:hidden">График</span>
+          <span className="hidden sm:inline">Управление на графика</span>
         </button>
       </div>
 
@@ -330,26 +332,27 @@ export default function AdminGroupTrainings({
       {activeTab === "calendar" && (
         <>
           {/* Week Navigation */}
-          <Card className="border-0 shadow-sm">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-4">
+          <Card className="py-0 border-0 shadow-sm">
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex items-center justify-between mb-4 gap-2">
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => navigateWeek(-1)}
-                  className="rounded-xl gap-1"
+                  className="rounded-xl gap-1 h-9"
+                  aria-label="Предишна седмица"
                 >
                   <ChevronLeft className="w-4 h-4" />
-                  Предишна
+                  <span className="hidden sm:inline">Предишна</span>
                 </Button>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-semibold text-gray-900">{monthLabel}</span>
+                <div className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-3 min-w-0">
+                  <span className="text-sm font-semibold text-gray-900 truncate">{monthLabel}</span>
                   {!isCurrentWeek && (
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => setCurrentWeekStart(new Date())}
-                      className="text-xs text-orange-600 hover:text-orange-700 rounded-lg"
+                      className="text-xs text-orange-600 hover:text-orange-700 rounded-lg h-6 sm:h-8"
                     >
                       Тази седмица
                     </Button>
@@ -359,9 +362,10 @@ export default function AdminGroupTrainings({
                   variant="ghost"
                   size="sm"
                   onClick={() => navigateWeek(1)}
-                  className="rounded-xl gap-1"
+                  className="rounded-xl gap-1 h-9"
+                  aria-label="Следваща седмица"
                 >
-                  Следваща
+                  <span className="hidden sm:inline">Следваща</span>
                   <ChevronRight className="w-4 h-4" />
                 </Button>
               </div>
@@ -374,8 +378,8 @@ export default function AdminGroupTrainings({
                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-purple-50 border border-purple-200" />Деца 8-11г.</span>
               </div>
 
-              {/* Week Grid */}
-              <div className="grid grid-cols-7 gap-2">
+              {/* Week Grid — телефон: agenda списък, таблет+: 7 колони */}
+              <div className="grid grid-cols-1 sm:grid-cols-7 gap-2">
                 {weekDates.map((date) => {
                   const dayOfWeek = date.getDay();
                   const dateStr = formatDateStr(date);
@@ -389,7 +393,7 @@ export default function AdminGroupTrainings({
                     <div
                       key={date.toISOString()}
                       className={cn(
-                        "rounded-xl border p-2.5 min-h-[130px] transition-all",
+                        "rounded-xl border p-2.5 sm:min-h-[130px] transition-all flex items-start gap-3 sm:block",
                         isToday
                           ? "border-orange-400 bg-orange-50/50 ring-1 ring-orange-200"
                           : "border-gray-200 bg-white",
@@ -397,7 +401,7 @@ export default function AdminGroupTrainings({
                       )}
                     >
                       {/* Day Header */}
-                      <div className="text-center mb-2 pb-1.5 border-b border-gray-100">
+                      <div className="text-center w-12 shrink-0 sm:w-auto mb-0 sm:mb-2 pb-0 sm:pb-1.5 border-b-0 sm:border-b border-gray-100">
                         <p className="text-[10px] text-gray-400 uppercase tracking-wider">
                           {SHORT_DAY_NAMES[dayOfWeek]}
                         </p>
@@ -415,7 +419,7 @@ export default function AdminGroupTrainings({
                       </div>
 
                       {/* All Events (trainings + bookings) */}
-                      <div className="space-y-1.5">
+                      <div className="space-y-1.5 flex-1 min-w-0 self-center sm:self-auto">
                         {/* Court bookings */}
                         {dayBookings.map((booking) => {
                           const bStart = new Date(booking.start_time);
@@ -489,8 +493,9 @@ export default function AdminGroupTrainings({
                         })}
 
                         {totalEvents === 0 && (
-                          <p className="text-[10px] text-gray-300 text-center py-3">
-                            —
+                          <p className="text-[10px] text-gray-300 text-center sm:py-3">
+                            <span className="sm:hidden">Няма събития</span>
+                            <span className="hidden sm:inline">—</span>
                           </p>
                         )}
                       </div>
@@ -514,7 +519,7 @@ export default function AdminGroupTrainings({
             return (
               <Card className="border-0 shadow-sm">
                 <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <div className="flex items-center gap-3">
                       <div className={cn(
                         "w-9 h-9 rounded-xl flex items-center justify-center",
@@ -560,32 +565,36 @@ export default function AdminGroupTrainings({
                       {regsOnDate.map((reg) => (
                         <div
                           key={reg.id}
-                          className="flex items-center justify-between bg-gray-50 rounded-lg p-3 border border-gray-100"
+                          className="flex items-center justify-between gap-2 bg-gray-50 rounded-lg p-3 border border-gray-100"
                         >
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
                               <User className="w-4 h-4 text-orange-600" />
                             </div>
-                            <div>
+                            <div className="min-w-0">
                               <p className="text-sm font-medium">
                                 {reg.child_name}{" "}
                                 <span className="text-gray-400 font-normal">
                                   ({reg.child_age} г.)
                                 </span>
                               </p>
-                              <div className="flex items-center gap-3 text-xs text-gray-500">
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-500">
                                 <span>Родител: {reg.parent_name}</span>
-                                <span className="flex items-center gap-1">
+                                <a
+                                  href={`tel:${reg.phone}`}
+                                  className="flex items-center gap-1 text-orange-600 active:underline"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
                                   <Phone className="w-3 h-3" />
                                   {reg.phone}
-                                </span>
+                                </a>
                               </div>
                             </div>
                           </div>
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg"
+                            className="text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg shrink-0 h-9"
                             onClick={() => onCancelRegistration(reg.id)}
                           >
                             Отмени
@@ -607,15 +616,15 @@ export default function AdminGroupTrainings({
           {/* Add New Training */}
           <Card className="border-0 shadow-sm">
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg font-semibold">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <CardTitle className="text-base sm:text-lg font-semibold">
                   График на груповите тренировки
                 </CardTitle>
                 <Button
                   onClick={() => setShowAddForm(!showAddForm)}
                   size="sm"
                   className={cn(
-                    "rounded-xl gap-2",
+                    "rounded-xl gap-2 h-10 w-full sm:w-auto",
                     showAddForm
                       ? "bg-gray-200 text-gray-700 hover:bg-gray-300"
                       : "bg-orange-600 hover:bg-orange-700 text-white"
@@ -939,8 +948,8 @@ export default function AdminGroupTrainings({
                           )}
                         >
                           {/* Training Row */}
-                          <div className="flex items-center gap-3 p-4">
-                            <div className="flex-1 flex items-center gap-4 flex-wrap">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4">
+                            <div className="flex-1 flex items-center gap-x-4 gap-y-2 flex-wrap">
                               <div className="flex items-center gap-2">
                                 <Calendar className="w-4 h-4 text-gray-400" />
                                 <span className="text-sm font-medium">
@@ -997,11 +1006,11 @@ export default function AdminGroupTrainings({
                               )}
                             </div>
 
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 self-end sm:self-auto -mt-1 sm:mt-0">
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 rounded-lg"
+                                className="h-9 w-9 rounded-lg"
                                 onClick={() => onToggleActive(training.id)}
                                 title={
                                   training.is_active
@@ -1018,7 +1027,7 @@ export default function AdminGroupTrainings({
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 rounded-lg"
+                                className="h-9 w-9 rounded-lg"
                                 onClick={() =>
                                   setExpandedTraining(
                                     isExpanded ? null : training.id
@@ -1034,7 +1043,7 @@ export default function AdminGroupTrainings({
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 rounded-lg text-red-500 hover:text-red-700 hover:bg-red-50"
+                                className="h-9 w-9 rounded-lg text-red-500 hover:text-red-700 hover:bg-red-50"
                                 onClick={() => onRemoveTraining(training.id)}
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -1058,25 +1067,28 @@ export default function AdminGroupTrainings({
                                   {regs.map((reg) => (
                                     <div
                                       key={reg.id}
-                                      className="flex items-center justify-between bg-white rounded-lg p-3 border border-gray-100"
+                                      className="flex items-center justify-between gap-2 bg-white rounded-lg p-3 border border-gray-100"
                                     >
-                                      <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center">
+                                      <div className="flex items-center gap-3 min-w-0">
+                                        <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
                                           <User className="w-4 h-4 text-orange-600" />
                                         </div>
-                                        <div>
+                                        <div className="min-w-0">
                                           <p className="text-sm font-medium">
                                             {reg.child_name}{" "}
                                             <span className="text-gray-400 font-normal">
                                               ({reg.child_age} г.)
                                             </span>
                                           </p>
-                                          <div className="flex items-center gap-3 text-xs text-gray-500">
+                                          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-500">
                                             <span>Родител: {reg.parent_name}</span>
-                                            <span className="flex items-center gap-1">
+                                            <a
+                                              href={`tel:${reg.phone}`}
+                                              className="flex items-center gap-1 text-orange-600 active:underline"
+                                            >
                                               <Phone className="w-3 h-3" />
                                               {reg.phone}
-                                            </span>
+                                            </a>
                                             <span className="text-gray-400">
                                               Дата: {reg.date}
                                             </span>
@@ -1086,7 +1098,7 @@ export default function AdminGroupTrainings({
                                       <Button
                                         variant="ghost"
                                         size="sm"
-                                        className="text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg"
+                                        className="text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg shrink-0 h-9"
                                         onClick={() =>
                                           onCancelRegistration(reg.id)
                                         }

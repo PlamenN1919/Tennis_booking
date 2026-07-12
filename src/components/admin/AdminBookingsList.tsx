@@ -193,11 +193,11 @@ export default function AdminBookingsList({ bookings, onCancelBooking }: AdminBo
       </div>
 
       {/* Search & Filters Bar */}
-      <Card className="border-0 shadow-sm rounded-2xl">
+      <Card className="py-0 border-0 shadow-sm rounded-2xl">
         <CardContent className="p-4">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             {/* Search */}
-            <div className="relative flex-1 max-w-md">
+            <div className="relative flex-1 sm:max-w-md">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <Input
                 value={searchQuery}
@@ -208,59 +208,61 @@ export default function AdminBookingsList({ bookings, onCancelBooking }: AdminBo
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
                 >
                   <X className="w-4 h-4" />
                 </button>
               )}
             </div>
 
-            {/* Filter Toggle */}
-            <Button
-              variant={showFilters ? "default" : "outline"}
-              size="sm"
-              className={cn(
-                "rounded-full gap-2 h-10",
-                showFilters && "bg-orange-600 hover:bg-orange-700 text-white"
-              )}
-              onClick={() => setShowFilters(!showFilters)}
-            >
-              <Filter className="w-4 h-4" />
-              Филтри
-              {activeFiltersCount > 0 && (
-                <span className="w-5 h-5 rounded-full bg-white/20 text-[10px] font-bold flex items-center justify-center">
-                  {activeFiltersCount}
-                </span>
-              )}
-            </Button>
+            <div className="flex items-center gap-2">
+              {/* Filter Toggle */}
+              <Button
+                variant={showFilters ? "default" : "outline"}
+                size="sm"
+                className={cn(
+                  "rounded-full gap-2 h-10 flex-1 sm:flex-none",
+                  showFilters && "bg-orange-600 hover:bg-orange-700 text-white"
+                )}
+                onClick={() => setShowFilters(!showFilters)}
+              >
+                <Filter className="w-4 h-4" />
+                Филтри
+                {activeFiltersCount > 0 && (
+                  <span className="w-5 h-5 rounded-full bg-white/20 text-[10px] font-bold flex items-center justify-center">
+                    {activeFiltersCount}
+                  </span>
+                )}
+              </Button>
 
-            {/* Sort */}
-            <Select value={`${sortField}-${sortOrder}`} onValueChange={(v) => {
-              const [field, order] = v.split("-") as [SortField, SortOrder];
-              setSortField(field);
-              setSortOrder(order);
-            }}>
-              <SelectTrigger className="w-auto rounded-full h-10 min-w-[160px]">
-                <div className="flex items-center gap-2">
-                  <ArrowUpDown className="w-3.5 h-3.5" />
-                  <SelectValue />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="date-desc">Дата (нови първо)</SelectItem>
-                <SelectItem value="date-asc">Дата (стари първо)</SelectItem>
-                <SelectItem value="price-desc">Цена (↓)</SelectItem>
-                <SelectItem value="price-asc">Цена (↑)</SelectItem>
-                <SelectItem value="type-asc">Тип (A-Z)</SelectItem>
-              </SelectContent>
-            </Select>
+              {/* Sort */}
+              <Select value={`${sortField}-${sortOrder}`} onValueChange={(v) => {
+                const [field, order] = v.split("-") as [SortField, SortOrder];
+                setSortField(field);
+                setSortOrder(order);
+              }}>
+                <SelectTrigger className="flex-1 sm:flex-none sm:w-auto rounded-full h-10 sm:min-w-[160px]">
+                  <div className="flex items-center gap-2">
+                    <ArrowUpDown className="w-3.5 h-3.5" />
+                    <SelectValue />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="date-desc">Дата (нови първо)</SelectItem>
+                  <SelectItem value="date-asc">Дата (стари първо)</SelectItem>
+                  <SelectItem value="price-desc">Цена (↓)</SelectItem>
+                  <SelectItem value="price-asc">Цена (↑)</SelectItem>
+                  <SelectItem value="type-asc">Тип (A-Z)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* Filter Options */}
           {showFilters && (
-            <div className="flex items-center gap-3 mt-4 pt-4 border-t border-gray-100 flex-wrap">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-3 sm:flex-wrap mt-4 pt-4 border-t border-gray-100">
               <Select value={timeFilter} onValueChange={(v) => setTimeFilter(v as TimeFilter)}>
-                <SelectTrigger className="w-auto rounded-full h-9 min-w-[130px] text-xs">
+                <SelectTrigger className="w-full sm:w-auto rounded-full h-9 sm:min-w-[130px] text-xs">
                   <SelectValue placeholder="Период" />
                 </SelectTrigger>
                 <SelectContent>
@@ -274,7 +276,7 @@ export default function AdminBookingsList({ bookings, onCancelBooking }: AdminBo
               </Select>
 
               <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
-                <SelectTrigger className="w-auto rounded-full h-9 min-w-[130px] text-xs">
+                <SelectTrigger className="w-full sm:w-auto rounded-full h-9 sm:min-w-[130px] text-xs">
                   <SelectValue placeholder="Статус" />
                 </SelectTrigger>
                 <SelectContent>
@@ -286,7 +288,7 @@ export default function AdminBookingsList({ bookings, onCancelBooking }: AdminBo
               </Select>
 
               <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as TypeFilter)}>
-                <SelectTrigger className="w-auto rounded-full h-9 min-w-[130px] text-xs">
+                <SelectTrigger className="w-full sm:w-auto rounded-full h-9 sm:min-w-[130px] text-xs">
                   <SelectValue placeholder="Тип" />
                 </SelectTrigger>
                 <SelectContent>
@@ -297,7 +299,7 @@ export default function AdminBookingsList({ bookings, onCancelBooking }: AdminBo
               </Select>
 
               <Select value={courtFilter} onValueChange={(v) => setCourtFilter(v as CourtFilter)}>
-                <SelectTrigger className="w-auto rounded-full h-9 min-w-[120px] text-xs">
+                <SelectTrigger className="w-full sm:w-auto rounded-full h-9 sm:min-w-[120px] text-xs">
                   <SelectValue placeholder="Корт" />
                 </SelectTrigger>
                 <SelectContent>
@@ -311,11 +313,11 @@ export default function AdminBookingsList({ bookings, onCancelBooking }: AdminBo
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="rounded-full text-xs text-red-500 hover:text-red-700 hover:bg-red-50"
+                  className="col-span-2 sm:col-auto rounded-full text-xs text-red-500 hover:text-red-700 hover:bg-red-50 h-9"
                   onClick={clearFilters}
                 >
                   <X className="w-3 h-3 mr-1" />
-                  Изчисти
+                  Изчисти филтрите
                 </Button>
               )}
             </div>
@@ -324,7 +326,7 @@ export default function AdminBookingsList({ bookings, onCancelBooking }: AdminBo
       </Card>
 
       {/* Bookings Table */}
-      <Card className="border-0 shadow-sm rounded-2xl overflow-hidden">
+      <Card className="py-0 border-0 shadow-sm rounded-2xl overflow-hidden">
         <CardContent className="p-0">
           {filteredBookings.length === 0 ? (
             <div className="text-center py-16 text-gray-400">
@@ -333,128 +335,213 @@ export default function AdminBookingsList({ bookings, onCancelBooking }: AdminBo
               <p className="text-xs mt-1">Опитайте с различни филтри</p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-50">
-              {/* Table Header */}
-              <div className="grid grid-cols-[1fr_120px_100px_100px_100px_80px] gap-4 items-center px-5 py-3 bg-gray-50/80 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                <span>Резервация</span>
-                <span>Дата и час</span>
-                <span>Корт</span>
-                <span>Тип</span>
-                <span>Статус</span>
-                <span className="text-right">Цена</span>
+            <>
+              {/* ===== Мобилен изглед: карти ===== */}
+              <div className="md:hidden divide-y divide-gray-100">
+                {filteredBookings.map((booking) => {
+                  const startTime = new Date(booking.start_time);
+                  const endTime = new Date(booking.end_time);
+                  const courtName = getCourtNameById(booking.court_id);
+                  const isCoaching = booking.booking_type === "coaching_session";
+                  const coachName = booking.coach_id
+                    ? mockCoaches.find((c) => c.id === booking.coach_id)?.name
+                    : null;
+                  const isCancelled = booking.status === "cancelled";
+                  const customerName = (booking as any).customer_name;
+
+                  return (
+                    <button
+                      key={booking.id}
+                      onClick={() => setSelectedBooking(booking)}
+                      className={cn(
+                        "w-full text-left p-4 active:bg-gray-50 transition-colors",
+                        isCancelled && "opacity-50"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={cn(
+                            "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0",
+                            isCoaching ? "bg-purple-100" : "bg-blue-100"
+                          )}
+                        >
+                          {isCoaching ? (
+                            <Users className="w-4 h-4 text-purple-600" />
+                          ) : (
+                            <MapPin className="w-4 h-4 text-blue-600" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-gray-900 truncate">
+                            {customerName || (isCoaching ? "Урок с треньор" : "Наем на корт")}
+                          </p>
+                          <p className="text-xs text-gray-500 truncate">
+                            {isToday(startTime)
+                              ? "Днес"
+                              : isTomorrow(startTime)
+                              ? "Утре"
+                              : format(startTime, "d MMM", { locale: bg })}{" "}
+                            • {format(startTime, "HH:mm")}–{format(endTime, "HH:mm")}
+                            {coachName && ` • ${coachName}`}
+                          </p>
+                        </div>
+                        <span className="text-sm font-bold text-gray-900 shrink-0">
+                          {booking.total_price}€
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2 pl-[52px]">
+                        <Badge
+                          variant="secondary"
+                          className={cn(
+                            "text-[10px] border-0 font-semibold",
+                            booking.court_id === COURT_A_ID
+                              ? "bg-blue-50 text-blue-700"
+                              : "bg-green-50 text-green-700"
+                          )}
+                        >
+                          {courtName}
+                        </Badge>
+                        <Badge
+                          variant="secondary"
+                          className={cn(
+                            "text-[10px] border-0",
+                            isCoaching
+                              ? "bg-purple-50 text-purple-700"
+                              : "bg-orange-50 text-orange-700"
+                          )}
+                        >
+                          {isCoaching ? "Урок" : "Наем"}
+                        </Badge>
+                        {getStatusBadge(booking.status)}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
 
-              {/* Table Rows */}
-              {filteredBookings.map((booking) => {
-                const startTime = new Date(booking.start_time);
-                const endTime = new Date(booking.end_time);
-                const courtName = getCourtNameById(booking.court_id);
-                const isCoaching = booking.booking_type === "coaching_session";
-                const coachName = booking.coach_id
-                  ? mockCoaches.find((c) => c.id === booking.coach_id)?.name
-                  : null;
-                const isCancelled = booking.status === "cancelled";
-                const isInPast = isPast(startTime);
-                const customerName = (booking as any).customer_name;
+              {/* ===== Десктоп изглед: таблица ===== */}
+              <div className="hidden md:block divide-y divide-gray-50">
+                {/* Table Header */}
+                <div className="grid grid-cols-[1fr_120px_100px_100px_100px_80px] gap-4 items-center px-5 py-3 bg-gray-50/80 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                  <span>Резервация</span>
+                  <span>Дата и час</span>
+                  <span>Корт</span>
+                  <span>Тип</span>
+                  <span>Статус</span>
+                  <span className="text-right">Цена</span>
+                </div>
 
-                return (
-                  <div
-                    key={booking.id}
-                    className={cn(
-                      "grid grid-cols-[1fr_120px_100px_100px_100px_80px] gap-4 items-center px-5 py-3.5 hover:bg-gray-50/80 transition-colors cursor-pointer group",
-                      isCancelled && "opacity-50"
-                    )}
-                    onClick={() => setSelectedBooking(booking)}
-                  >
-                    {/* Booking Info */}
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div
-                        className={cn(
-                          "w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0",
-                          isCoaching ? "bg-purple-100" : "bg-blue-100"
-                        )}
-                      >
-                        {isCoaching ? (
-                          <Users className="w-4 h-4 text-purple-600" />
-                        ) : (
-                          <MapPin className="w-4 h-4 text-blue-600" />
-                        )}
+                {/* Table Rows */}
+                {filteredBookings.map((booking) => {
+                  const startTime = new Date(booking.start_time);
+                  const endTime = new Date(booking.end_time);
+                  const courtName = getCourtNameById(booking.court_id);
+                  const isCoaching = booking.booking_type === "coaching_session";
+                  const coachName = booking.coach_id
+                    ? mockCoaches.find((c) => c.id === booking.coach_id)?.name
+                    : null;
+                  const isCancelled = booking.status === "cancelled";
+                  const customerName = (booking as any).customer_name;
+
+                  return (
+                    <div
+                      key={booking.id}
+                      className={cn(
+                        "grid grid-cols-[1fr_120px_100px_100px_100px_80px] gap-4 items-center px-5 py-3.5 hover:bg-gray-50/80 transition-colors cursor-pointer group",
+                        isCancelled && "opacity-50"
+                      )}
+                      onClick={() => setSelectedBooking(booking)}
+                    >
+                      {/* Booking Info */}
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className={cn(
+                            "w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0",
+                            isCoaching ? "bg-purple-100" : "bg-blue-100"
+                          )}
+                        >
+                          {isCoaching ? (
+                            <Users className="w-4 h-4 text-purple-600" />
+                          ) : (
+                            <MapPin className="w-4 h-4 text-blue-600" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">
+                            {customerName || (isCoaching ? "Урок с треньор" : "Наем на корт")}
+                          </p>
+                          <p className="text-[11px] text-gray-500 truncate">
+                            {coachName && `${coachName} • `}
+                            {booking.notes ? booking.notes.split("\n")[0].substring(0, 30) : `ID: ${booking.id.substring(0, 8)}`}
+                          </p>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 truncate">
-                          {customerName || (isCoaching ? "Урок с треньор" : "Наем на корт")}
+
+                      {/* Date/Time */}
+                      <div>
+                        <p className="text-xs font-medium text-gray-900">
+                          {isToday(startTime)
+                            ? "Днес"
+                            : isTomorrow(startTime)
+                            ? "Утре"
+                            : format(startTime, "d MMM", { locale: bg })}
                         </p>
-                        <p className="text-[11px] text-gray-500 truncate">
-                          {coachName && `${coachName} • `}
-                          {booking.notes ? booking.notes.split("\n")[0].substring(0, 30) : `ID: ${booking.id.substring(0, 8)}`}
+                        <p className="text-[11px] text-gray-500">
+                          {format(startTime, "HH:mm")} – {format(endTime, "HH:mm")}
                         </p>
                       </div>
-                    </div>
 
-                    {/* Date/Time */}
-                    <div>
-                      <p className="text-xs font-medium text-gray-900">
-                        {isToday(startTime)
-                          ? "Днес"
-                          : isTomorrow(startTime)
-                          ? "Утре"
-                          : format(startTime, "d MMM", { locale: bg })}
-                      </p>
-                      <p className="text-[11px] text-gray-500">
-                        {format(startTime, "HH:mm")} – {format(endTime, "HH:mm")}
-                      </p>
-                    </div>
+                      {/* Court */}
+                      <div>
+                        <Badge
+                          variant="secondary"
+                          className={cn(
+                            "text-[10px] border-0 font-semibold",
+                            booking.court_id === COURT_A_ID
+                              ? "bg-blue-50 text-blue-700"
+                              : "bg-green-50 text-green-700"
+                          )}
+                        >
+                          {courtName}
+                        </Badge>
+                      </div>
 
-                    {/* Court */}
-                    <div>
-                      <Badge
-                        variant="secondary"
-                        className={cn(
-                          "text-[10px] border-0 font-semibold",
-                          booking.court_id === COURT_A_ID
-                            ? "bg-blue-50 text-blue-700"
-                            : "bg-green-50 text-green-700"
-                        )}
-                      >
-                        {courtName}
-                      </Badge>
-                    </div>
+                      {/* Type */}
+                      <div>
+                        <Badge
+                          variant="secondary"
+                          className={cn(
+                            "text-[10px] border-0",
+                            isCoaching
+                              ? "bg-purple-50 text-purple-700"
+                              : "bg-orange-50 text-orange-700"
+                          )}
+                        >
+                          {isCoaching ? "Урок" : "Наем"}
+                        </Badge>
+                      </div>
 
-                    {/* Type */}
-                    <div>
-                      <Badge
-                        variant="secondary"
-                        className={cn(
-                          "text-[10px] border-0",
-                          isCoaching
-                            ? "bg-purple-50 text-purple-700"
-                            : "bg-orange-50 text-orange-700"
-                        )}
-                      >
-                        {isCoaching ? "Урок" : "Наем"}
-                      </Badge>
-                    </div>
+                      {/* Status */}
+                      <div>{getStatusBadge(booking.status)}</div>
 
-                    {/* Status */}
-                    <div>{getStatusBadge(booking.status)}</div>
-
-                    {/* Price + Actions */}
-                    <div className="text-right flex items-center justify-end gap-2">
-                      <span className="text-sm font-bold text-gray-900">
-                        {booking.total_price}€
-                      </span>
+                      {/* Price + Actions */}
+                      <div className="text-right flex items-center justify-end gap-2">
+                        <span className="text-sm font-bold text-gray-900">
+                          {booking.total_price}€
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
 
       {/* Booking Detail Dialog */}
       <Dialog open={!!selectedBooking} onOpenChange={() => setSelectedBooking(null)}>
-        <DialogContent className="rounded-2xl max-w-md">
+        <DialogContent className="rounded-2xl max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <div

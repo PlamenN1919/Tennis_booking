@@ -345,7 +345,7 @@ export default function AdminCreateBooking({
   if (isSuccess) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <Card className="border-0 shadow-lg rounded-2xl max-w-md w-full">
+        <Card className="py-0 border-0 shadow-lg rounded-2xl max-w-md w-full">
           <CardContent className="p-8 text-center">
             <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
               <CheckCircle2 className="w-8 h-8 text-green-600" />
@@ -382,22 +382,22 @@ export default function AdminCreateBooking({
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-bold text-gray-900">Нова резервация</h2>
           <p className="text-sm text-gray-500">Създайте резервация за клиент</p>
         </div>
         {/* Step Indicator */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-center gap-1.5 sm:gap-2">
           {(["type", "datetime", "details", "confirm"] as Step[]).map((s, i) => {
             const labels = ["Тип", "Дата", "Детайли", "Преглед"];
             const isActive = step === s;
             const isPassed = ["type", "datetime", "details", "confirm"].indexOf(step) > i;
             return (
-              <div key={s} className="flex items-center gap-2">
+              <div key={s} className="flex items-center gap-1.5 sm:gap-2">
                 <div
                   className={cn(
-                    "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all",
+                    "w-7 h-7 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all",
                     isPassed
                       ? "bg-orange-600 text-white"
                       : isActive
@@ -408,13 +408,13 @@ export default function AdminCreateBooking({
                   {isPassed ? "✓" : i + 1}
                 </div>
                 <span className={cn(
-                  "text-xs font-medium hidden sm:inline",
-                  isActive ? "text-orange-600" : "text-gray-400"
+                  "text-xs font-medium",
+                  isActive ? "text-orange-600" : "text-gray-400 hidden sm:inline"
                 )}>
                   {labels[i]}
                 </span>
                 {i < 3 && <div className={cn(
-                  "w-6 h-0.5 rounded",
+                  "w-3 sm:w-6 h-0.5 rounded",
                   isPassed ? "bg-orange-400" : "bg-gray-200"
                 )} />}
               </div>
@@ -426,42 +426,46 @@ export default function AdminCreateBooking({
       {/* Step 1: Type Selection */}
       {step === "type" && (
         <div className="space-y-4">
-          <Card className="border-0 shadow-sm rounded-2xl">
-            <CardContent className="p-6">
+          <Card className="py-0 border-0 shadow-sm rounded-2xl">
+            <CardContent className="p-4 sm:p-6">
               <h3 className="text-sm font-semibold text-gray-900 mb-4">Изберете тип услуга</h3>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <button
                   onClick={() => setBookingType("court_rental")}
                   className={cn(
-                    "rounded-2xl p-6 text-left transition-all border-2",
+                    "rounded-2xl p-4 sm:p-6 text-left transition-all border-2 flex items-center gap-4 sm:block",
                     bookingType === "court_rental"
                       ? "border-orange-500 bg-orange-50 shadow-md"
                       : "border-gray-100 hover:border-gray-200 hover:bg-gray-50"
                   )}
                 >
-                  <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center mb-3">
+                  <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center shrink-0 sm:mb-3">
                     <MapPin className="w-6 h-6 text-blue-600" />
                   </div>
-                  <h4 className="font-bold text-gray-900">Наем на корт</h4>
-                  <p className="text-xs text-gray-500 mt-1">Резервация на тенис корт без треньор</p>
-                  <p className="text-lg font-black text-orange-600 mt-3">от 15 €/час</p>
+                  <div className="min-w-0">
+                    <h4 className="font-bold text-gray-900">Наем на корт</h4>
+                    <p className="text-xs text-gray-500 mt-1">Резервация на тенис корт без треньор</p>
+                    <p className="text-lg font-black text-orange-600 mt-1 sm:mt-3">от 15 €/час</p>
+                  </div>
                 </button>
 
                 <button
                   onClick={() => setBookingType("coaching_session")}
                   className={cn(
-                    "rounded-2xl p-6 text-left transition-all border-2",
+                    "rounded-2xl p-4 sm:p-6 text-left transition-all border-2 flex items-center gap-4 sm:block",
                     bookingType === "coaching_session"
                       ? "border-orange-500 bg-orange-50 shadow-md"
                       : "border-gray-100 hover:border-gray-200 hover:bg-gray-50"
                   )}
                 >
-                  <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center mb-3">
+                  <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center shrink-0 sm:mb-3">
                     <Users className="w-6 h-6 text-purple-600" />
                   </div>
-                  <h4 className="font-bold text-gray-900">Урок с треньор</h4>
-                  <p className="text-xs text-gray-500 mt-1">Индивидуална сесия с професионалист</p>
-                  <p className="text-lg font-black text-orange-600 mt-3">от 45 €/час</p>
+                  <div className="min-w-0">
+                    <h4 className="font-bold text-gray-900">Урок с треньор</h4>
+                    <p className="text-xs text-gray-500 mt-1">Индивидуална сесия с професионалист</p>
+                    <p className="text-lg font-black text-orange-600 mt-1 sm:mt-3">от 45 €/час</p>
+                  </div>
                 </button>
               </div>
 
@@ -529,13 +533,13 @@ export default function AdminCreateBooking({
       {/* Step 2: Date & Time */}
       {step === "datetime" && (
         <div className="space-y-4">
-          <Card className="border-0 shadow-sm rounded-2xl">
-            <CardContent className="p-6">
+          <Card className="py-0 border-0 shadow-sm rounded-2xl">
+            <CardContent className="p-4 sm:p-6">
               {/* Date Selection */}
               <div className="mb-6">
                 <Label className="text-sm font-semibold text-gray-700 mb-3 block">Дата</Label>
                 {/* Quick date buttons */}
-                <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
+                <div className="flex gap-2 mb-3 overflow-x-auto scrollbar-none pb-1">
                   {quickDates.map((qd) => (
                     <button
                       key={qd.date}
@@ -581,7 +585,7 @@ export default function AdminCreateBooking({
                         setSelectedCourt("");
                       }}
                       className={cn(
-                        "px-5 py-2.5 rounded-full text-sm font-medium transition-all",
+                        "flex-1 sm:flex-none px-5 py-2.5 rounded-full text-sm font-medium transition-all",
                         durationHours === d
                           ? "bg-orange-600 text-white"
                           : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -603,7 +607,7 @@ export default function AdminCreateBooking({
                       : "изберете дата"})
                   </span>
                 </Label>
-                <div className="grid grid-cols-5 gap-2">
+                <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
                   {hours.filter(h => h + durationHours <= CLOSING_HOUR).map((h) => {
                     const time = `${String(h).padStart(2, "0")}:00`;
                     const slot = availableSlots[time];
@@ -711,8 +715,8 @@ export default function AdminCreateBooking({
       {/* Step 3: Customer Details */}
       {step === "details" && (
         <div className="space-y-4">
-          <Card className="border-0 shadow-sm rounded-2xl">
-            <CardContent className="p-6">
+          <Card className="py-0 border-0 shadow-sm rounded-2xl">
+            <CardContent className="p-4 sm:p-6">
               <h3 className="text-sm font-semibold text-gray-900 mb-4">Данни на клиента</h3>
 
               <div className="space-y-4">
@@ -784,15 +788,15 @@ export default function AdminCreateBooking({
                     </button>
                   </div>
                   {isRecurring && (
-                    <div className="mt-3 flex items-center gap-3">
+                    <div className="mt-3 flex items-center gap-3 flex-wrap">
                       <Label className="text-xs text-gray-500 flex-shrink-0">Брой седмици:</Label>
-                      <div className="flex gap-1">
+                      <div className="flex gap-1.5 flex-wrap">
                         {[2, 4, 6, 8, 12].map((w) => (
                           <button
                             key={w}
                             onClick={() => setRecurringWeeks(w)}
                             className={cn(
-                              "px-3 py-1 rounded-full text-xs font-medium transition-all",
+                              "min-w-9 px-3 py-1.5 rounded-full text-xs font-medium transition-all",
                               recurringWeeks === w
                                 ? "bg-orange-600 text-white"
                                 : "bg-white text-gray-600 hover:bg-gray-100"
@@ -832,8 +836,8 @@ export default function AdminCreateBooking({
       {/* Step 4: Confirmation */}
       {step === "confirm" && (
         <div className="space-y-4">
-          <Card className="border-0 shadow-sm rounded-2xl">
-            <CardContent className="p-6">
+          <Card className="py-0 border-0 shadow-sm rounded-2xl">
+            <CardContent className="p-4 sm:p-6">
               <h3 className="text-sm font-semibold text-gray-900 mb-4">Преглед на резервацията</h3>
 
               {/* Summary */}

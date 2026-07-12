@@ -150,7 +150,7 @@ export default function AdminOverview({ bookings, onNavigate }: AdminOverviewPro
             {format(new Date(), "EEEE, d MMMM yyyy", { locale: bg })} •{" "}
             {stats.todayBookings.length} резервации днес
           </p>
-          <div className="flex gap-3 mt-4">
+          <div className="flex flex-wrap gap-3 mt-4">
             <Button
               onClick={() => onNavigate("create")}
               className="bg-orange-600 hover:bg-orange-700 text-white rounded-full gap-2 text-sm"
@@ -161,7 +161,7 @@ export default function AdminOverview({ bookings, onNavigate }: AdminOverviewPro
             <Button
               onClick={() => onNavigate("calendar")}
               variant="outline"
-              className="border-white/20 text-white hover:bg-white/10 rounded-full gap-2 text-sm"
+              className="bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white rounded-full gap-2 text-sm"
             >
               Виж календара
               <ArrowRight className="w-4 h-4" />
@@ -171,8 +171,8 @@ export default function AdminOverview({ bookings, onNavigate }: AdminOverviewPro
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="border-0 shadow-sm rounded-2xl hover:shadow-md transition-shadow">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <Card className="py-0 border-0 shadow-sm rounded-2xl hover:shadow-md transition-shadow">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
               <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
@@ -182,14 +182,14 @@ export default function AdminOverview({ bookings, onNavigate }: AdminOverviewPro
                 Днес
               </Badge>
             </div>
-            <p className="text-3xl font-black text-gray-900">{stats.todayBookings.length}</p>
+            <p className="text-2xl sm:text-3xl font-black text-gray-900">{stats.todayBookings.length}</p>
             <p className="text-xs text-gray-500 mt-1">
               резервации • {stats.tomorrowBookings.length} утре
             </p>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm rounded-2xl hover:shadow-md transition-shadow">
+        <Card className="py-0 border-0 shadow-sm rounded-2xl hover:shadow-md transition-shadow">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
               <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center">
@@ -210,7 +210,7 @@ export default function AdminOverview({ bookings, onNavigate }: AdminOverviewPro
                 </Badge>
               )}
             </div>
-            <p className="text-3xl font-black text-gray-900">
+            <p className="text-2xl sm:text-3xl font-black text-gray-900">
               {stats.thisMonthRevenue}
               <span className="text-sm font-bold text-gray-400 ml-1">€</span>
             </p>
@@ -218,14 +218,14 @@ export default function AdminOverview({ bookings, onNavigate }: AdminOverviewPro
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm rounded-2xl hover:shadow-md transition-shadow">
+        <Card className="py-0 border-0 shadow-sm rounded-2xl hover:shadow-md transition-shadow">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
               <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center">
                 <Activity className="w-5 h-5 text-orange-600" />
               </div>
             </div>
-            <p className="text-3xl font-black text-gray-900">
+            <p className="text-2xl sm:text-3xl font-black text-gray-900">
               {stats.todayUtilization}
               <span className="text-sm font-bold text-gray-400 ml-1">%</span>
             </p>
@@ -233,14 +233,14 @@ export default function AdminOverview({ bookings, onNavigate }: AdminOverviewPro
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm rounded-2xl hover:shadow-md transition-shadow">
+        <Card className="py-0 border-0 shadow-sm rounded-2xl hover:shadow-md transition-shadow">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
               <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center">
                 <Users className="w-5 h-5 text-purple-600" />
               </div>
             </div>
-            <p className="text-3xl font-black text-gray-900">{stats.totalBookings}</p>
+            <p className="text-2xl sm:text-3xl font-black text-gray-900">{stats.totalBookings}</p>
             <p className="text-xs text-gray-500 mt-1">
               общо ({stats.courtRentals} наема, {stats.coachingSessions} урока)
             </p>
@@ -251,7 +251,7 @@ export default function AdminOverview({ bookings, onNavigate }: AdminOverviewPro
       {/* Today's Timeline + Upcoming */}
       <div className="grid lg:grid-cols-5 gap-6">
         {/* Today's Court Timeline */}
-        <Card className="border-0 shadow-sm rounded-2xl lg:col-span-3">
+        <Card className="py-0 border-0 shadow-sm rounded-2xl lg:col-span-3">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-gray-900">Днешен график</h3>
@@ -355,7 +355,7 @@ export default function AdminOverview({ bookings, onNavigate }: AdminOverviewPro
         </Card>
 
         {/* Upcoming Bookings */}
-        <Card className="border-0 shadow-sm rounded-2xl lg:col-span-2">
+        <Card className="py-0 border-0 shadow-sm rounded-2xl lg:col-span-2">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-gray-900">Предстоящи</h3>
@@ -426,44 +426,44 @@ export default function AdminOverview({ bookings, onNavigate }: AdminOverviewPro
       </div>
 
       {/* Quick Stats Row */}
-      <div className="grid grid-cols-3 gap-4">
-        <Card className="border-0 shadow-sm rounded-2xl">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        <Card className="py-0 border-0 shadow-sm rounded-2xl">
+          <CardContent className="p-3 sm:p-5">
+            <div className="flex flex-col sm:flex-row items-center text-center sm:text-left gap-1.5 sm:gap-3">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
                 <Clock className="w-5 h-5 text-amber-600" />
               </div>
-              <div>
-                <p className="text-xs text-gray-500">Пиков час</p>
-                <p className="text-lg font-bold text-gray-900">{stats.peakHour}</p>
+              <div className="min-w-0">
+                <p className="text-[10px] sm:text-xs text-gray-500">Пиков час</p>
+                <p className="text-base sm:text-lg font-bold text-gray-900">{stats.peakHour}</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm rounded-2xl">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
+        <Card className="py-0 border-0 shadow-sm rounded-2xl">
+          <CardContent className="p-3 sm:p-5">
+            <div className="flex flex-col sm:flex-row items-center text-center sm:text-left gap-1.5 sm:gap-3">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
                 <DollarSign className="w-5 h-5 text-emerald-600" />
               </div>
-              <div>
-                <p className="text-xs text-gray-500">Приход днес</p>
-                <p className="text-lg font-bold text-gray-900">{stats.todayRevenue}€</p>
+              <div className="min-w-0">
+                <p className="text-[10px] sm:text-xs text-gray-500">Приход днес</p>
+                <p className="text-base sm:text-lg font-bold text-gray-900">{stats.todayRevenue}€</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm rounded-2xl">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center">
+        <Card className="py-0 border-0 shadow-sm rounded-2xl">
+          <CardContent className="p-3 sm:p-5">
+            <div className="flex flex-col sm:flex-row items-center text-center sm:text-left gap-1.5 sm:gap-3">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-rose-50 flex items-center justify-center shrink-0">
                 <MapPin className="w-5 h-5 text-rose-600" />
               </div>
-              <div>
-                <p className="text-xs text-gray-500">Месечни резервации</p>
-                <p className="text-lg font-bold text-gray-900">{stats.thisMonthBookings}</p>
+              <div className="min-w-0">
+                <p className="text-[10px] sm:text-xs text-gray-500">Този месец</p>
+                <p className="text-base sm:text-lg font-bold text-gray-900">{stats.thisMonthBookings}</p>
               </div>
             </div>
           </CardContent>

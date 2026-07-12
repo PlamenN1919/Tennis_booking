@@ -90,14 +90,14 @@ export default function AdminCoachManager() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-gray-900">Треньори</h2>
           <p className="text-sm text-gray-500">Управлявайте треньорите и техните PIN кодове за достъп.</p>
         </div>
         <Button
           onClick={() => { setIsAdding(!isAdding); if (!isAdding) generatePin(); }}
-          className="bg-orange-600 hover:bg-orange-700 text-white gap-2"
+          className="bg-orange-600 hover:bg-orange-700 text-white gap-2 w-full sm:w-auto h-10"
         >
           <UserPlus className="w-4 h-4" />
           Нов треньор
@@ -105,7 +105,7 @@ export default function AdminCoachManager() {
       </div>
 
       {isAdding && (
-        <Card className="border border-orange-200 bg-orange-50/50 shadow-sm">
+        <Card className="py-0 border border-orange-200 bg-orange-50/50 shadow-sm">
           <CardContent className="p-5 space-y-4">
             <h3 className="font-bold text-gray-900">Нов треньор</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -164,17 +164,17 @@ export default function AdminCoachManager() {
           </div>
         ) : (
           coaches.map((coach) => (
-            <Card key={coach.id} className="border-0 shadow-sm">
-              <CardContent className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold">
+            <Card key={coach.id} className="py-0 border-0 shadow-sm">
+              <CardContent className="p-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold shrink-0">
                     {coach.name.charAt(0).toUpperCase()}
                   </div>
-                  <div>
-                    <p className="font-bold text-gray-900">{coach.name}</p>
+                  <div className="min-w-0">
+                    <p className="font-bold text-gray-900 truncate">{coach.name}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   {coach.pin && (
                     <button
                       onClick={() => copyPin(coach.pin!)}

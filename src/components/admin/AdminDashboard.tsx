@@ -4,7 +4,6 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import {
   Search,
   Bell,
-  Menu,
   LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,6 +15,7 @@ import { getCourts, getBookingsForDateRange, cancelBooking } from "@/lib/actions
 import { getStoredBookings, saveBookings } from "@/lib/booking-storage";
 import { format } from "date-fns";
 import AdminSidebar, { type AdminView } from "./AdminSidebar";
+import AdminBottomNav from "./AdminBottomNav";
 import AdminOverview from "./AdminOverview";
 import AdminCalendar from "./AdminCalendar";
 import AdminBookingsList from "./AdminBookingsList";
@@ -44,7 +44,6 @@ const viewTitles: Record<AdminView, string> = {
 export default function AdminDashboard() {
   const [currentView, setCurrentView] = useState<AdminView>("overview");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
   const [allBookings, setAllBookings] = useState<Booking[]>(() => getStoredBookings());
   const [groupTrainings, setGroupTrainings] = useState<GroupTraining[]>([]);
   const [groupRegistrations, setGroupRegistrations] = useState<GroupTrainingRegistration[]>([]);
@@ -340,49 +339,30 @@ export default function AdminDashboard() {
         />
       </div>
 
-      {/* Mobile Sidebar Overlay */}
-      {mobileOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={() => setMobileOpen(false)}
-          />
-          <div className="relative z-10 h-full w-[260px] animate-in slide-in-from-left duration-300">
-            <AdminSidebar
-              currentView={currentView}
-              onViewChange={(v) => {
-                setCurrentView(v);
-                setMobileOpen(false);
-                setPrefillDate(undefined);
-                setPrefillTime(undefined);
-                setPrefillCourt(undefined);
-              }}
-              collapsed={false}
-              onToggle={() => setMobileOpen(false)}
-              stats={{ todayBookings, pendingCount }}
-            />
-          </div>
-        </div>
-      )}
+      {/* Mobile Bottom Navigation */}
+      <AdminBottomNav
+        currentView={currentView}
+        onViewChange={(v) => {
+          setCurrentView(v);
+          setPrefillDate(undefined);
+          setPrefillTime(undefined);
+          setPrefillCourt(undefined);
+        }}
+        onLogout={handleLogout}
+        todayBookings={isHydrated ? todayBookings : 0}
+      />
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Bar */}
         <header className="h-16 bg-white border-b border-gray-100 flex items-center justify-between px-4 sm:px-6 flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="lg:hidden rounded-xl"
-              onClick={() => setMobileOpen(true)}
-            >
-              <Menu className="w-5 h-5" />
-            </Button>
-            <div>
-              <h1 className="text-lg font-bold text-gray-900">
-                {viewTitles[currentView]}
-              </h1>
-            </div>
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="lg:hidden text-base font-black tracking-tighter shrink-0">
+              T<span className="text-orange-500">C</span>
+            </span>
+            <h1 className="text-lg font-bold text-gray-900 truncate">
+              {viewTitles[currentView]}
+            </h1>
           </div>
 
           <div className="flex items-center gap-2">
@@ -407,15 +387,15 @@ export default function AdminDashboard() {
             </Button>
 
             {/* User Avatar */}
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white text-sm font-bold cursor-pointer">
+            <div className="hidden sm:flex w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 items-center justify-center text-white text-sm font-bold cursor-pointer">
               A
             </div>
 
-            {/* Logout */}
+            {/* Logout — на телефон е в меню „Още" */}
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-full text-gray-400 hover:text-red-500"
+              className="hidden sm:inline-flex rounded-full text-gray-400 hover:text-red-500"
               onClick={handleLogout}
               title="Изход"
             >
@@ -424,8 +404,8 @@ export default function AdminDashboard() {
           </div>
         </header>
 
-        {/* Content Area */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+        {/* Content Area — долен отстъп на телефон заради навигационната лента */}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 pb-28 lg:pb-6">
           {renderView()}
         </main>
       </div>
