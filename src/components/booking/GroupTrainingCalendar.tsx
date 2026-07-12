@@ -687,7 +687,7 @@ export default function GroupTrainingCalendar() {
                       Цена на тренировка
                     </span>
                     <span className="text-lg font-bold text-orange-400">
-                      20 лв.
+                      20 €
                     </span>
                   </div>
 
