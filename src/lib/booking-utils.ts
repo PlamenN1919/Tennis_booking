@@ -322,27 +322,47 @@ export function groupTrainingsToVirtualBookings(
   return virtualBookings;
 }
 
+// Constructing Intl.DateTimeFormat is expensive (~0.5–2ms each). The
+// availability checks call the converters below for every booking × slot ×
+// court, so a fresh formatter per call froze the UI for seconds once real
+// production bookings were loaded. Share one formatter and memoize results.
+let sofiaFormatter: Intl.DateTimeFormat | null = null;
+function getSofiaFormatter(): Intl.DateTimeFormat {
+  if (!sofiaFormatter) {
+    sofiaFormatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Europe/Sofia",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+  }
+  return sofiaFormatter;
+}
+
+const MAX_TZ_CACHE_ENTRIES = 10000;
+const sofiaToUTCCache = new Map<string, string>();
+const utcToSofiaCache = new Map<string, number>();
+
 /**
  * Convert a local Sofia date and time string to a UTC ISO string.
  * Accounts for DST transitions in Europe/Sofia.
  */
 export function sofiaToUTC(dateStr: string, timeStr: string): string {
+  const cacheKey = `${dateStr}T${timeStr}`;
+  const cached = sofiaToUTCCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
   const [year, month, day] = dateStr.split("-").map(Number);
   const [hours, minutes] = timeStr.split(":").map(Number);
 
   // Initial guess assuming standard EET (UTC+2)
   let utcMs = Date.UTC(year, month - 1, day, hours - 2, minutes);
 
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Europe/Sofia",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
+  const formatter = getSofiaFormatter();
 
   for (let i = 0; i < 3; i++) {
     const parts = formatter.formatToParts(new Date(utcMs));
@@ -359,28 +379,24 @@ export function sofiaToUTC(dateStr: string, timeStr: string): string {
     utcMs += diffMs;
   }
 
-  return new Date(utcMs).toISOString();
+  const result = new Date(utcMs).toISOString();
+  if (sofiaToUTCCache.size >= MAX_TZ_CACHE_ENTRIES) sofiaToUTCCache.clear();
+  sofiaToUTCCache.set(cacheKey, result);
+  return result;
 }
 
 /**
  * Convert a UTC ISO string to a Date object representing Sofia's local components in the browser/server environment.
  */
 export function utcToSofiaDate(utcString: string): Date {
+  const cached = utcToSofiaCache.get(utcString);
+  if (cached !== undefined) return new Date(cached);
+
   const date = new Date(utcString);
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Europe/Sofia",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
-  const parts = formatter.formatToParts(date);
+  const parts = getSofiaFormatter().formatToParts(date);
   const partMap: Record<string, string> = {};
   parts.forEach((p) => (partMap[p.type] = p.value));
-  return new Date(
+  const result = new Date(
     parseInt(partMap.year, 10),
     parseInt(partMap.month, 10) - 1,
     parseInt(partMap.day, 10),
@@ -388,4 +404,8 @@ export function utcToSofiaDate(utcString: string): Date {
     parseInt(partMap.minute, 10),
     parseInt(partMap.second, 10)
   );
+
+  if (utcToSofiaCache.size >= MAX_TZ_CACHE_ENTRIES) utcToSofiaCache.clear();
+  utcToSofiaCache.set(utcString, result.getTime());
+  return result;
 }
